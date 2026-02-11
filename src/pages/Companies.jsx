@@ -94,7 +94,7 @@ export default function Companies() {
     const handleDownload = (doc) => {
         // Create a temporary link to force download
         const link = document.createElement('a');
-        link.href = `http://localhost:3001${doc.file_path}`;
+        link.href = `http://localhost:3002${doc.file_path}`;
         link.download = doc.file_name;
         document.body.appendChild(link);
         link.click();
@@ -247,7 +247,7 @@ export default function Companies() {
                                             </div>
                                             <div className="flex gap-sm">
                                                 <a
-                                                    href={`http://localhost:3001${doc.file_path}`}
+                                                    href={`http://localhost:3002${doc.file_path}`}
                                                     target="_blank"
                                                     rel="noopener noreferrer"
                                                     className="btn btn-ghost btn-sm"

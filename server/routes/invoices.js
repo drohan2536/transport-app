@@ -185,7 +185,7 @@ router.post('/:id/email', async (req, res) => {
     `).get(req.params.id);
         if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-        const contact = db.prepare('SELECT email FROM contact_persons WHERE client_id = ? AND email != "" LIMIT 1').get(invoice.client_id);
+        const contact = db.prepare("SELECT email FROM contact_persons WHERE client_id = ? AND email != '' LIMIT 1").get(invoice.client_id);
         if (!contact || !contact.email) {
             return res.status(400).json({ error: 'No email found for this client' });
         }

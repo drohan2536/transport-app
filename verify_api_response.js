@@ -4,7 +4,7 @@ import http from 'http';
 // First get the list of invoices to find a valid ID
 const listReq = http.request({
     hostname: 'localhost',
-    port: 3001,
+    port: 3002,
     path: '/api/invoices',
     method: 'GET'
 }, (res) => {
