@@ -2,7 +2,7 @@
 import chalk from 'chalk';
 import { fetch } from 'undici';
 
-const BASE_URL = 'http://localhost:3001/api';
+const BASE_URL = 'http://localhost:3002/api';
 
 async function verify() {
     console.log(chalk.blue('Starting Invoice API Verification...'));
