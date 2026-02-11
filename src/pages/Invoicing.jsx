@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
+import pdfMake from 'pdfmake/build/pdfmake';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
+import { buildPdfDefinition, loadLogoBase64 } from '../utils/pdfGenerator.js';
+
+pdfMake.vfs = pdfFonts.default?.pdfMake?.vfs || pdfFonts.pdfMake?.vfs || pdfFonts.vfs;
 
 export default function Invoicing() {
     const showToast = useToast();
@@ -68,7 +73,7 @@ export default function Invoicing() {
 
     const finalizeInvoice = async () => {
         try {
-            await api.createInvoice({
+            const newInvoice = await api.createInvoice({
                 client_id: Number(clientId),
                 from_date: fromDate,
                 to_date: toDate,
@@ -76,6 +81,18 @@ export default function Invoicing() {
                 entry_ids: selectedEntryIds,
             });
             showToast('Invoice created successfully! 🎉');
+
+            // Auto-download PDF
+            try {
+                const logoBase64 = await loadLogoBase64();
+                const docDef = buildPdfDefinition(newInvoice, logoBase64);
+                pdfMake.createPdf(docDef).download(`Invoice_${newInvoice.invoice_number}.pdf`);
+                showToast('PDF downloaded automatically');
+            } catch (pdfErr) {
+                console.error('Auto-download failed', pdfErr);
+                showToast('Invoice created, but PDF auto-download failed. You can download it from Dashboard.', 'warning');
+            }
+
             setShowPreview(false);
             setEntries([]);
             setSelectedEntryIds([]);
@@ -192,34 +209,47 @@ export default function Invoicing() {
                             </div>
                         </div>
 
+                        {/* Dynamic Table Rendering */}
                         <table>
                             <thead>
                                 <tr>
                                     <th>#</th>
-                                    <th>Date</th>
-                                    <th>Route</th>
-                                    <th>Type</th>
-                                    <th>Challan</th>
-                                    <th>Vehicle</th>
-                                    <th className="text-right">Amount</th>
-                                    <th className="text-right">Charges</th>
-                                    <th className="text-right">Total</th>
+                                    {(JSON.parse(client?.invoice_visible_columns || '[]').length > 0 ? JSON.parse(client.invoice_visible_columns) : ['date', 'from_location', 'to_location', 'entry_type', 'challan_number', 'vehicle_number', 'amount', 'loading_charges', 'total_amount']).map(colId => {
+                                        const labelMap = {
+                                            date: 'Date', from_location: 'From', to_location: 'To', entry_type: 'Type',
+                                            challan_number: 'Challan', vehicle_number: 'Vehicle',
+                                            amount: 'Amount', loading_charges: 'Charges', total_amount: 'Total',
+                                            unit: 'Unit', length: 'L', width: 'W', gsm: 'GSM', packaging: 'Pkg',
+                                            no_of_packets: 'Pkt', weight: 'Wgt', rate_per_kg: 'Rate/Kg',
+                                            no_of_bundles: 'Bdls', rate_per_bundle: 'Rate/Bdl'
+                                        };
+                                        return <th key={colId} className={['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle'].includes(colId) ? 'text-right' : ''}>{labelMap[colId] || colId}</th>;
+                                    })}
                                 </tr>
                             </thead>
                             <tbody>
-                                {selectedEntries.map((e, i) => (
-                                    <tr key={e.id}>
-                                        <td>{i + 1}</td>
-                                        <td>{e.date}</td>
-                                        <td>{e.from_location && e.to_location ? `${e.from_location} → ${e.to_location}` : '—'}</td>
-                                        <td>{e.entry_type === 'per_kg' ? 'Per Kg' : 'Per Bundle'}</td>
-                                        <td>{e.has_challan ? e.challan_number : '—'}</td>
-                                        <td>{e.has_vehicle ? e.vehicle_number : '—'}</td>
-                                        <td className="text-right">₹{(e.amount || 0).toFixed(2)}</td>
-                                        <td className="text-right">{e.loading_charges > 0 ? `₹${e.loading_charges.toFixed(2)}` : '—'}</td>
-                                        <td className="text-right" style={{ fontWeight: 600 }}>₹{(e.total_amount || 0).toFixed(2)}</td>
-                                    </tr>
-                                ))}
+                                {selectedEntries.map((e, i) => {
+                                    const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
+                                    const colsToRender = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'entry_type', 'challan_number', 'vehicle_number', 'amount', 'loading_charges', 'total_amount'];
+
+                                    return (
+                                        <tr key={e.id}>
+                                            <td>{i + 1}</td>
+                                            {colsToRender.map(colId => {
+                                                let val = e[colId];
+                                                // Format specific fields
+                                                if (colId === 'entry_type') val = e.entry_type === 'per_kg' ? 'Kg' : 'Bundle';
+                                                else if (colId === 'challan_number') val = e.has_challan ? e.challan_number : '—';
+                                                else if (colId === 'vehicle_number') val = e.has_vehicle ? e.vehicle_number : '—';
+                                                else if (['amount', 'loading_charges', 'total_amount'].includes(colId)) val = `₹${(e[colId] || 0).toFixed(2)}`;
+                                                else if (['weight', 'rate_per_kg', 'rate_per_bundle'].includes(colId)) val = (e[colId] || 0);
+
+                                                const isRight = ['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle'].includes(colId);
+                                                return <td key={colId} className={isRight ? 'text-right' : ''} style={colId === 'total_amount' ? { fontWeight: 600 } : {}}>{val !== undefined && val !== null ? val : '—'}</td>;
+                                            })}
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                         </table>
 

@@ -3,106 +3,9 @@ import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
 import pdfMake from 'pdfmake/build/pdfmake';
 import * as pdfFonts from 'pdfmake/build/vfs_fonts';
+import { buildPdfDefinition, loadLogoBase64 } from '../utils/pdfGenerator.js';
 
 pdfMake.vfs = pdfFonts.default?.pdfMake?.vfs || pdfFonts.pdfMake?.vfs || pdfFonts.vfs;
-
-function buildPdfDefinition(invoice) {
-    const entries = invoice.entries || [];
-    const tableBody = [
-        [
-            { text: '#', style: 'tableHeader' },
-            { text: 'Date', style: 'tableHeader' },
-            { text: 'Route', style: 'tableHeader' },
-            { text: 'Type', style: 'tableHeader' },
-            { text: 'Challan', style: 'tableHeader' },
-            { text: 'Vehicle', style: 'tableHeader' },
-            { text: 'Amount', style: 'tableHeader', alignment: 'right' },
-            { text: 'Charges', style: 'tableHeader', alignment: 'right' },
-            { text: 'Total', style: 'tableHeader', alignment: 'right' },
-        ],
-        ...entries.map((e, i) => [
-            i + 1,
-            e.date,
-            e.from_location && e.to_location ? `${e.from_location} → ${e.to_location}` : '-',
-            e.entry_type === 'per_kg' ? 'Per Kg' : 'Per Bundle',
-            e.has_challan ? (e.challan_number || '-') : '-',
-            e.has_vehicle ? (e.vehicle_number || '-') : '-',
-            { text: `₹${(e.amount || 0).toFixed(2)}`, alignment: 'right' },
-            { text: e.loading_charges > 0 ? `₹${e.loading_charges.toFixed(2)}` : '-', alignment: 'right' },
-            { text: `₹${(e.total_amount || 0).toFixed(2)}`, alignment: 'right', bold: true },
-        ]),
-    ];
-
-    return {
-        content: [
-            { text: invoice.company_name, style: 'companyName', alignment: 'center' },
-            { text: invoice.company_address || '', alignment: 'center', fontSize: 10, color: '#666', margin: [0, 0, 0, 2] },
-            { text: invoice.company_phone ? `Phone: ${invoice.company_phone}` : '', alignment: 'center', fontSize: 9, color: '#999', margin: [0, 0, 0, 15] },
-            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#ddd' }], margin: [0, 0, 0, 15] },
-            {
-                columns: [
-                    {
-                        width: '50%',
-                        stack: [
-                            { text: 'BILL TO', style: 'sectionLabel' },
-                            { text: invoice.client_name, bold: true, fontSize: 12 },
-                            { text: invoice.client_address || '', fontSize: 10, color: '#666' },
-                        ],
-                    },
-                    {
-                        width: '50%',
-                        alignment: 'right',
-                        stack: [
-                            { text: 'INVOICE', style: 'sectionLabel', alignment: 'right' },
-                            { text: `#${invoice.invoice_number}`, bold: true, fontSize: 14, color: '#6366f1' },
-                            { text: `Date: ${invoice.invoice_date}`, fontSize: 10, color: '#666' },
-                            { text: `Period: ${invoice.from_date} to ${invoice.to_date}`, fontSize: 9, color: '#999' },
-                        ],
-                    },
-                ],
-                margin: [0, 0, 0, 20],
-            },
-            {
-                table: { headerRows: 1, widths: [20, 55, 70, 45, 50, 50, 55, 50, 60], body: tableBody },
-                layout: {
-                    hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0.5,
-                    vLineWidth: () => 0,
-                    hLineColor: (i) => i <= 1 ? '#ccc' : '#eee',
-                    paddingTop: () => 6,
-                    paddingBottom: () => 6,
-                    fillColor: (i) => i === 0 ? '#f8f9fa' : null,
-                },
-            },
-            {
-                columns: [
-                    { width: '*', text: '' },
-                    {
-                        width: 'auto',
-                        stack: [
-                            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 180, y2: 0, lineWidth: 2, lineColor: '#e2e8f0' }], margin: [0, 10, 0, 8] },
-                            { text: 'TOTAL AMOUNT', fontSize: 9, color: '#999', alignment: 'right' },
-                            { text: `₹${(invoice.final_amount || 0).toFixed(2)}`, fontSize: 20, bold: true, alignment: 'right', color: '#1a1a2e' },
-                        ],
-                    },
-                ],
-            },
-            { text: '', margin: [0, 30, 0, 0] },
-            { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#ddd' }], margin: [0, 0, 0, 10] },
-            {
-                columns: [
-                    { width: '50%', text: invoice.owner_name ? `Authorized Signatory: ${invoice.owner_name}` : '', fontSize: 9, color: '#666' },
-                    { width: '50%', text: invoice.pan_id ? `PAN: ${invoice.pan_id}` : '', fontSize: 9, color: '#666', alignment: 'right' },
-                ],
-            },
-        ],
-        styles: {
-            companyName: { fontSize: 20, bold: true, color: '#1a1a2e', margin: [0, 0, 0, 4] },
-            sectionLabel: { fontSize: 8, bold: true, color: '#999', letterSpacing: 1, margin: [0, 0, 0, 4] },
-            tableHeader: { bold: true, fontSize: 8, color: '#555' },
-        },
-        defaultStyle: { font: 'Roboto', fontSize: 10 },
-    };
-}
 
 export default function Dashboard() {
     const showToast = useToast();
@@ -139,7 +42,9 @@ export default function Dashboard() {
     const handleSavePdf = async (inv) => {
         try {
             const full = await api.getInvoice(inv.id);
-            const docDef = buildPdfDefinition(full);
+            const logoBase64 = await loadLogoBase64();
+
+            const docDef = buildPdfDefinition(full, logoBase64);
             pdfMake.createPdf(docDef).download(`Invoice_${full.invoice_number}.pdf`);
             showToast('PDF downloaded');
         } catch (e) { showToast(e.message, 'error'); }
@@ -152,8 +57,11 @@ export default function Dashboard() {
                 showToast('No email found for this client', 'error');
                 return;
             }
+
+            const logoBase64 = await loadLogoBase64();
+
             // Generate PDF as base64
-            const docDef = buildPdfDefinition(full);
+            const docDef = buildPdfDefinition(full, logoBase64);
             pdfMake.createPdf(docDef).getBase64(async (base64) => {
                 try {
                     await api.emailInvoice(inv.id, base64);

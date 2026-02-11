@@ -63,12 +63,36 @@ router.delete('/:id', (req, res) => {
     res.status(204).end();
 });
 
-// POST upload certificate
-router.post('/:id/upload', upload.single('certificate'), (req, res) => {
+// GET company documents
+router.get('/:id/documents', (req, res) => {
+    const docs = db.prepare('SELECT * FROM company_documents WHERE company_id = ? ORDER BY created_at DESC').all(req.params.id);
+    res.json(docs);
+});
+
+// POST upload document
+router.post('/:id/documents', upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     const filePath = `/uploads/${req.file.filename}`;
-    db.prepare('UPDATE companies SET udyam_certificate_path = ? WHERE id = ?').run(filePath, req.params.id);
-    res.json({ path: filePath });
+    const result = db.prepare('INSERT INTO company_documents (company_id, file_path, file_name) VALUES (?, ?, ?)')
+        .run(req.params.id, filePath, req.file.originalname);
+    res.json({ id: result.lastInsertRowid, file_path: filePath, file_name: req.file.originalname });
+});
+
+// DELETE document
+router.delete('/:id/documents/:docId', (req, res) => {
+    const doc = db.prepare('SELECT * FROM company_documents WHERE id = ?').get(req.params.docId);
+    if (!doc) return res.status(404).json({ error: 'Document not found' });
+
+    // Delete file from filesystem
+    try {
+        const fullPath = path.join(__dirname, '..', doc.file_path);
+        if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+    } catch (e) {
+        console.error('Error deleting file:', e);
+    }
+
+    db.prepare('DELETE FROM company_documents WHERE id = ?').run(req.params.docId);
+    res.status(204).end();
 });
 
 export default router;

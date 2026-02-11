@@ -27,6 +27,14 @@ app.use('/api/entries', entriesRouter);
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/smtp', smtpRouter);
 
+// Error handling middleware
+app.use((err, req, res, next) => {
+    const errorLog = `[${new Date().toISOString()}] ${err.stack}\n`;
+    fs.appendFileSync(path.join(__dirname, 'server_errors.log'), errorLog);
+    console.error(err.stack);
+    res.status(500).json({ error: 'Internal Server Error', message: err.message });
+});
+
 app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
 });

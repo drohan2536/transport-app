@@ -2,8 +2,31 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
 
-const emptyContact = { name: '', phone: '', email: '' };
-const emptyClient = { name: '', address: '', company_id: '', contacts: [{ ...emptyContact }] };
+const emptyContact = { name: '', phone: '', email: '' }; // Default columns to match Dashboard.jsx logic
+const defaultColumns = ['date', 'from_location', 'to_location', 'entry_type', 'challan_number', 'vehicle_number', 'amount', 'loading_charges', 'total_amount'];
+const emptyClient = { name: '', address: '', company_id: '', invoice_visible_columns: defaultColumns, contacts: [{ ...emptyContact }] };
+
+const INVOICE_COLUMNS = [
+    { id: 'date', label: 'Date' },
+    { id: 'from_location', label: 'From' },
+    { id: 'to_location', label: 'To' },
+    { id: 'challan_number', label: 'Challan No' },
+    { id: 'vehicle_number', label: 'Vehicle No' },
+    { id: 'entry_type', label: 'Entry Type' },
+    { id: 'unit', label: 'Unit' },
+    { id: 'length', label: 'Length' },
+    { id: 'width', label: 'Width' },
+    { id: 'gsm', label: 'GSM' },
+    { id: 'packaging', label: 'Packaging' },
+    { id: 'no_of_packets', label: 'No. of Packets' },
+    { id: 'weight', label: 'Weight' },
+    { id: 'rate_per_kg', label: 'Rate per Kg' },
+    { id: 'no_of_bundles', label: 'No of Bundle' },
+    { id: 'rate_per_bundle', label: 'Rate per Bundle' },
+    { id: 'amount', label: 'Amount' },
+    { id: 'loading_charges', label: 'Loading/Unloading Charges' },
+    { id: 'total_amount', label: 'Total Amount' },
+];
 
 export default function Clients() {
     const showToast = useToast();
@@ -13,6 +36,7 @@ export default function Clients() {
     const [editing, setEditing] = useState(null);
     const [form, setForm] = useState({ ...emptyClient });
     const [loading, setLoading] = useState(true);
+    const [selectedCompanyId, setSelectedCompanyId] = useState('');
 
     const load = async () => {
         setLoading(true);
@@ -26,18 +50,26 @@ export default function Clients() {
 
     useEffect(() => { load(); }, []);
 
+    const filteredClients = selectedCompanyId
+        ? clients.filter(c => c.company_id === Number(selectedCompanyId))
+        : clients;
+
     const openAdd = () => {
         setEditing(null);
-        setForm({ ...emptyClient, company_id: companies[0]?.id || '', contacts: [{ ...emptyContact }] });
+        setForm({ ...emptyClient, company_id: companies[0]?.id || '', invoice_visible_columns: defaultColumns, contacts: [{ ...emptyContact }] });
         setShowModal(true);
     };
 
     const openEdit = (c) => {
         setEditing(c);
+        let visibleCols = [];
+        try { visibleCols = JSON.parse(c.invoice_visible_columns || '[]'); } catch (e) { }
+
         setForm({
             name: c.name,
             address: c.address,
             company_id: c.company_id,
+            invoice_visible_columns: visibleCols,
             contacts: c.contacts.length > 0 ? c.contacts.map(cp => ({ name: cp.name, phone: cp.phone, email: cp.email })) : [{ ...emptyContact }]
         });
         setShowModal(true);
@@ -74,6 +106,14 @@ export default function Clients() {
 
     const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
+    const toggleColumn = (colId) => {
+        setForm(prev => {
+            const current = prev.invoice_visible_columns || [];
+            if (current.includes(colId)) return { ...prev, invoice_visible_columns: current.filter(c => c !== colId) };
+            return { ...prev, invoice_visible_columns: [...current, colId] };
+        });
+    };
+
     const updateContact = (idx, field, value) => {
         setForm(prev => {
             const contacts = [...prev.contacts];
@@ -93,7 +133,19 @@ export default function Clients() {
         <div>
             <div className="page-header">
                 <h1><span className="page-header-icon">👥</span> Clients</h1>
-                <button className="btn btn-primary" onClick={openAdd} disabled={companies.length === 0}>+ Add Client</button>
+
+                <div className="flex gap-md" style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                    <select
+                        className="form-select"
+                        style={{ width: '200px' }}
+                        value={selectedCompanyId}
+                        onChange={e => setSelectedCompanyId(e.target.value)}
+                    >
+                        <option value="">All Companies</option>
+                        {companies.map(co => <option key={co.id} value={co.id}>{co.name}</option>)}
+                    </select>
+                    <button className="btn btn-primary" onClick={openAdd} disabled={companies.length === 0}>+ Add Client</button>
+                </div>
             </div>
 
             {companies.length === 0 && (
@@ -104,10 +156,10 @@ export default function Clients() {
 
             {loading ? (
                 <div className="empty-state"><div className="spinner" style={{ margin: '0 auto' }}></div></div>
-            ) : clients.length === 0 ? (
+            ) : filteredClients.length === 0 ? (
                 <div className="empty-state">
                     <div className="empty-state-icon">👥</div>
-                    <p>No clients yet. Add your first client to get started.</p>
+                    <p>{selectedCompanyId ? 'No clients found for this company.' : 'No clients yet. Add your first client to get started.'}</p>
                 </div>
             ) : (
                 <div className="table-container">
@@ -115,17 +167,17 @@ export default function Clients() {
                         <thead>
                             <tr>
                                 <th>Client Name</th>
-                                <th>Company</th>
+                                {/* Company column removed as requested */}
                                 <th>Address</th>
                                 <th>Contacts</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {clients.map(c => (
+                            {filteredClients.map(c => (
                                 <tr key={c.id}>
                                     <td style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{c.name}</td>
-                                    <td><span className="badge badge-info">{c.company_name}</span></td>
+                                    {/* <td><span className="badge badge-info">{c.company_name}</span></td> */}
                                     <td style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis' }}>{c.address || '—'}</td>
                                     <td>
                                         {c.contacts.length > 0 ? c.contacts.map((cp, i) => (
@@ -173,6 +225,23 @@ export default function Clients() {
                                 <div className="form-group">
                                     <label className="form-label">Address</label>
                                     <textarea className="form-textarea" value={form.address} onChange={e => updateField('address', e.target.value)} placeholder="Full address" />
+                                </div>
+
+                                <div className="form-group">
+                                    <label className="form-label">Invoice Visible Columns</label>
+                                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', background: 'var(--bg-secondary)', padding: '10px', borderRadius: 'var(--radius-sm)' }}>
+                                        {INVOICE_COLUMNS.map(col => (
+                                            <label key={col.id} className="form-check">
+                                                <input
+                                                    type="checkbox"
+                                                    checked={(form.invoice_visible_columns || []).includes(col.id)}
+                                                    onChange={() => toggleColumn(col.id)}
+                                                />
+                                                <span>{col.label}</span>
+                                            </label>
+                                        ))}
+                                    </div>
+                                    <div className="form-hint">Selected columns will appear on the generated invoice PDF for this client.</div>
                                 </div>
 
                                 {/* Contact Persons */}

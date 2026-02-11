@@ -36,26 +36,30 @@ router.get('/', (req, res) => {
 });
 
 // GET single invoice with entries
-router.get('/:id', (req, res) => {
-    const invoice = db.prepare(`
-    SELECT i.*, c.name as client_name, c.address as client_address,
-      co.name as company_name, co.address as company_address,
-      co.phone as company_phone, co.email as company_email,
-      co.owner_name, co.pan_id
-    FROM invoices i
-    JOIN clients c ON i.client_id = c.id
-    JOIN companies co ON i.company_id = co.id
-    WHERE i.id = ?
-  `).get(req.params.id);
-    if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
+router.get('/:id', (req, res, next) => {
+    try {
+        const invoice = db.prepare(`
+      SELECT i.*, c.name as client_name, c.address as client_address, c.invoice_visible_columns,
+        co.name as company_name, co.address as company_address,
+        co.phone as company_phone, co.email as company_email,
+        co.owner_name, co.pan_id
+      FROM invoices i
+      JOIN clients c ON i.client_id = c.id
+      JOIN companies co ON i.company_id = co.id
+      WHERE i.id = ?
+    `).get(req.params.id);
+        if (!invoice) return res.status(404).json({ error: 'Invoice not found' });
 
-    invoice.entries = db.prepare('SELECT * FROM entries WHERE invoice_id = ? ORDER BY date').all(req.params.id);
+        invoice.entries = db.prepare('SELECT * FROM entries WHERE invoice_id = ? ORDER BY date').all(req.params.id);
 
-    // Get client email (first contact with email)
-    const contact = db.prepare('SELECT email FROM contact_persons WHERE client_id = ? AND email != "" LIMIT 1').get(invoice.client_id);
-    invoice.client_email = contact ? contact.email : '';
+        // Get client email (first contact with email)
+        const contact = db.prepare("SELECT email FROM contact_persons WHERE client_id = ? AND email != '' LIMIT 1").get(invoice.client_id);
+        invoice.client_email = contact ? contact.email : '';
 
-    res.json(invoice);
+        res.json(invoice);
+    } catch (err) {
+        next(err);
+    }
 });
 
 // POST create invoice

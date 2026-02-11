@@ -1,6 +1,8 @@
 import React, { useState, useCallback, createContext, useContext } from 'react';
 import { NavLink, Outlet } from 'react-router-dom';
 
+import logo from '../assets/logo.svg';
+
 // Toast context
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
@@ -19,8 +21,11 @@ export default function Layout() {
             <div className="app-layout">
                 <aside className="sidebar">
                     <div className="sidebar-brand">
-                        <h1>🚛 Transport Manager</h1>
-                        <div className="brand-sub">Business Management Suite</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
+                            <img src={logo} alt="Logo" style={{ height: '40px', width: 'auto' }} />
+                            <h1 style={{ fontSize: '1.2rem', lineHeight: '1.2' }}>MorMukut Transport<br />Billing System</h1>
+                        </div>
+                        <div className="brand-sub">Smart Transport Billing for KGTS & VTS</div>
                     </div>
                     <nav className="sidebar-nav">
                         <div className="sidebar-section">Management</div>

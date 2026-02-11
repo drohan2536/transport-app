@@ -1,0 +1,11 @@
+[2026-02-11T22:30:04.164Z] SqliteError: no such column: "" - should this be a string literal in single-quotes?
+    at Database.prepare (C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\better-sqlite3\lib\methods\wrappers.js:5:21)
+    at file:///C:/Users/rohan/.gemini/antigravity/scratch/transport-app/server/routes/invoices.js:56:28
+    at Layer.handle [as handle_request] (C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\express\lib\router\layer.js:95:5)
+    at next (C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\express\lib\router\route.js:149:13)
+    at Route.dispatch (C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\express\lib\router\route.js:119:3)
+    at Layer.handle [as handle_request] (C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\express\lib\router\layer.js:95:5)
+    at C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\express\lib\router\index.js:284:15
+    at param (C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\express\lib\router\index.js:365:14)
+    at param (C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\express\lib\router\index.js:376:14)
+    at Function.process_params (C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\express\lib\router\index.js:421:3)

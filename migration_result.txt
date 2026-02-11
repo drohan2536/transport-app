@@ -1,0 +1,6 @@
+Running migration...
+owner_name exists/error
+pan_id exists/error
+udyam_cert exists/error
+Columns in companies table: ["id","name","address","email","phone","owner_name","pan_id","udyam_certificate_path","created_at"]
+SUCCESS: Columns present.

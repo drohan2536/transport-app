@@ -32,8 +32,20 @@ db.exec(`
     name TEXT NOT NULL,
     address TEXT DEFAULT '',
     company_id INTEGER NOT NULL REFERENCES companies(id),
+    invoice_visible_columns TEXT DEFAULT '[]',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
+
+
+
+  CREATE TABLE IF NOT EXISTS company_documents (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    company_id INTEGER NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+    file_path TEXT NOT NULL,
+    file_name TEXT NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
 
   CREATE TABLE IF NOT EXISTS contact_persons (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -96,5 +108,31 @@ db.exec(`
 
   INSERT OR IGNORE INTO smtp_config (id) VALUES (1);
 `);
+
+// Migration: Add invoice_visible_columns if missing
+try {
+  db.prepare("ALTER TABLE clients ADD COLUMN invoice_visible_columns TEXT DEFAULT '[]'").run();
+} catch (err) {
+  if (!err.message.includes('duplicate column name')) {
+    console.error('Migration error (clients.invoice_visible_columns):', err.message);
+  }
+}
+
+// Migration: Add missing columns to companies table
+const migrations = [
+  "ALTER TABLE companies ADD COLUMN owner_name TEXT DEFAULT ''",
+  "ALTER TABLE companies ADD COLUMN pan_id TEXT DEFAULT ''",
+  "ALTER TABLE companies ADD COLUMN udyam_certificate_path TEXT DEFAULT ''"
+];
+
+migrations.forEach(sql => {
+  try {
+    db.prepare(sql).run();
+  } catch (err) {
+    if (!err.message.includes('duplicate column name')) {
+      console.error(`Migration error (${sql}):`, err.message);
+    }
+  }
+});
 
 export default db;

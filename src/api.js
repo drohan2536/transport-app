@@ -20,11 +20,26 @@ export const api = {
     createCompany: (data) => request('/companies', { method: 'POST', body: JSON.stringify(data) }),
     updateCompany: (id, data) => request(`/companies/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteCompany: (id) => request(`/companies/${id}`, { method: 'DELETE' }),
-    uploadCertificate: (id, file) => {
+    uploadCertificate: (id, file) => { // Deprecated, but kept for compatibility
         const fd = new FormData();
         fd.append('certificate', file);
         return fetch(`${BASE}/companies/${id}/upload`, { method: 'POST', body: fd }).then(r => r.json());
     },
+    getCompanyDocuments: (id) => request(`/companies/${id}/documents`),
+    uploadCompanyDocument: (id, file) => {
+        const fd = new FormData();
+        fd.append('file', file);
+        // Use fetch directly for FormData + file upload
+        return fetch(`${BASE}/companies/${id}/documents`, { method: 'POST', body: fd })
+            .then(async res => {
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: res.statusText }));
+                    throw new Error(err.error || 'Upload failed');
+                }
+                return res.json();
+            });
+    },
+    deleteCompanyDocument: (id, docId) => request(`/companies/${id}/documents/${docId}`, { method: 'DELETE' }),
 
     // Clients
     getClients: () => request('/clients'),
