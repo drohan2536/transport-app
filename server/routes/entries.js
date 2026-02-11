@@ -53,17 +53,11 @@ router.post('/', (req, res) => {
         return res.status(400).json({ error: 'Client, Date, and Entry Type are required' });
     }
 
-    // Recalculate weight/amount server-side for integrity
-    let weight = 0, amount = 0, totalAmount = 0;
-    if (d.entry_type === 'per_kg') {
-        const divisor = d.unit === 'inches' ? 3100 : 20000;
-        weight = ((d.length || 0) * (d.width || 0) * (d.gsm || 0)) / divisor / 5 * (d.packaging || 0) * (d.no_of_packets || 0);
-        amount = weight * (d.rate_per_kg || 0);
-    } else {
-        amount = (d.no_of_bundles || 0) * (d.rate_per_bundle || 0);
-    }
+    // Use client values if provided, otherwise default to 0 (trust client logic for manual overrides)
+    const weight = d.weight !== undefined ? d.weight : 0;
+    const amount = d.amount !== undefined ? d.amount : 0;
     const loadingCharges = d.has_loading_charges ? (d.loading_charges || 0) : 0;
-    totalAmount = amount + loadingCharges;
+    const totalAmount = d.total_amount !== undefined ? d.total_amount : (amount + loadingCharges);
 
     const result = db.prepare(`
     INSERT INTO entries (client_id, date, from_location, to_location,
@@ -97,16 +91,10 @@ router.post('/', (req, res) => {
 router.put('/:id', (req, res) => {
     const d = req.body;
 
-    let weight = 0, amount = 0, totalAmount = 0;
-    if (d.entry_type === 'per_kg') {
-        const divisor = d.unit === 'inches' ? 3100 : 20000;
-        weight = ((d.length || 0) * (d.width || 0) * (d.gsm || 0)) / divisor / 5 * (d.packaging || 0) * (d.no_of_packets || 0);
-        amount = weight * (d.rate_per_kg || 0);
-    } else {
-        amount = (d.no_of_bundles || 0) * (d.rate_per_bundle || 0);
-    }
+    const weight = d.weight !== undefined ? d.weight : 0;
+    const amount = d.amount !== undefined ? d.amount : 0;
     const loadingCharges = d.has_loading_charges ? (d.loading_charges || 0) : 0;
-    totalAmount = amount + loadingCharges;
+    const totalAmount = d.total_amount !== undefined ? d.total_amount : (amount + loadingCharges);
 
     db.prepare(`
     UPDATE entries SET client_id=?, date=?, from_location=?, to_location=?,

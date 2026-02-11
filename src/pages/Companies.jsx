@@ -12,6 +12,12 @@ export default function Companies() {
     const [form, setForm] = useState({ ...emptyCompany });
     const [loading, setLoading] = useState(true);
 
+    // Document Management State
+    const [showDocsModal, setShowDocsModal] = useState(false);
+    const [currentCompany, setCurrentCompany] = useState(null);
+    const [documents, setDocuments] = useState([]);
+    const [uploading, setUploading] = useState(false);
+
     const load = async () => {
         setLoading(true);
         try { setCompanies(await api.getCompanies()); }
@@ -52,20 +58,56 @@ export default function Companies() {
         } catch (e) { showToast(e.message, 'error'); }
     };
 
-    const handleUpload = async (companyId) => {
+    // --- Document Management ---
+
+    const openDocuments = async (company) => {
+        setCurrentCompany(company);
+        setShowDocsModal(true);
+        loadDocuments(company.id);
+    };
+
+    const loadDocuments = async (companyId) => {
+        try {
+            const docs = await api.getCompanyDocuments(companyId);
+            setDocuments(docs);
+        } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    const handleUpload = async () => {
         const input = document.createElement('input');
         input.type = 'file';
-        input.accept = '.pdf,.jpg,.jpeg,.png';
+        input.accept = '.pdf,.jpg,.jpeg,.png'; // Allow multiple? input.multiple = true;
         input.onchange = async (e) => {
             const file = e.target.files[0];
             if (!file) return;
+            setUploading(true);
             try {
-                await api.uploadCertificate(companyId, file);
-                showToast('Certificate uploaded');
-                load();
+                await api.uploadCompanyDocument(currentCompany.id, file);
+                showToast('Document uploaded successfully');
+                loadDocuments(currentCompany.id);
             } catch (err) { showToast(err.message, 'error'); }
+            setUploading(false);
         };
         input.click();
+    };
+
+    const handleDownload = (doc) => {
+        // Create a temporary link to force download
+        const link = document.createElement('a');
+        link.href = `http://localhost:3001${doc.file_path}`;
+        link.download = doc.file_name;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+    };
+
+    const handleDeleteDocument = async (doc) => {
+        if (!confirm('Delete this document?')) return;
+        try {
+            await api.deleteCompanyDocument(currentCompany.id, doc.id);
+            showToast('Document deleted');
+            loadDocuments(currentCompany.id);
+        } catch (e) { showToast(e.message, 'error'); }
     };
 
     const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
@@ -94,7 +136,7 @@ export default function Companies() {
                                 <th>Phone</th>
                                 <th>Owner</th>
                                 <th>PAN ID</th>
-                                <th>Certificate</th>
+                                <th>Certificates</th>
                                 <th>Actions</th>
                             </tr>
                         </thead>
@@ -107,16 +149,13 @@ export default function Companies() {
                                     <td>{c.owner_name || '—'}</td>
                                     <td><span className="font-mono">{c.pan_id}</span></td>
                                     <td>
-                                        {c.udyam_certificate_path ? (
-                                            <span className="badge badge-success">✓ Uploaded</span>
-                                        ) : (
-                                            <button className="btn btn-ghost btn-sm" onClick={() => handleUpload(c.id)}>📎 Upload</button>
-                                        )}
+                                        <button className="btn btn-ghost btn-sm" onClick={() => openDocuments(c)} title="Manage Documents">
+                                            📎 Manage
+                                        </button>
                                     </td>
                                     <td>
                                         <div className="actions-group">
                                             <button className="btn btn-ghost btn-sm" onClick={() => openEdit(c)} title="Edit">✏️</button>
-                                            <button className="btn btn-ghost btn-sm" onClick={() => handleUpload(c.id)} title="Upload Certificate">📎</button>
                                             <button className="btn btn-ghost btn-sm text-danger" onClick={() => handleDelete(c)} title="Delete">🗑️</button>
                                         </div>
                                     </td>
@@ -127,7 +166,7 @@ export default function Companies() {
                 </div>
             )}
 
-            {/* Modal */}
+            {/* Edit/Add Company Modal */}
             {showModal && (
                 <div className="modal-overlay" onClick={() => setShowModal(false)}>
                     <div className="modal" onClick={e => e.stopPropagation()}>
@@ -171,6 +210,74 @@ export default function Companies() {
                                 <button type="submit" className="btn btn-primary">{editing ? 'Update' : 'Add Company'}</button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* Manage Documents Modal */}
+            {showDocsModal && currentCompany && (
+                <div className="modal-overlay" onClick={() => setShowDocsModal(false)}>
+                    <div className="modal" style={{ maxWidth: '600px' }} onClick={e => e.stopPropagation()}>
+                        <div className="modal-header">
+                            <h2>Documents: {currentCompany.name}</h2>
+                            <button className="modal-close" onClick={() => setShowDocsModal(false)}>×</button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="flex-between mb-md">
+                                <p style={{ color: 'var(--text-secondary)' }}>manage certificates and documents.</p>
+                                <button className="btn btn-primary btn-sm" onClick={handleUpload} disabled={uploading}>
+                                    {uploading ? 'Uploading...' : '+ Upload New'}
+                                </button>
+                            </div>
+
+                            {documents.length === 0 ? (
+                                <div className="empty-state" style={{ padding: '2rem' }}>
+                                    <p>No documents uploaded yet.</p>
+                                </div>
+                            ) : (
+                                <div className="list-group">
+                                    {documents.map(doc => (
+                                        <div key={doc.id} className="card flex-between mb-sm" style={{ padding: '10px' }}>
+                                            <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                                                <span style={{ fontSize: '1.2rem' }}>📄</span>
+                                                <div>
+                                                    <div style={{ fontWeight: 500 }}>{doc.file_name}</div>
+                                                    <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>{new Date(doc.created_at).toLocaleDateString()}</div>
+                                                </div>
+                                            </div>
+                                            <div className="flex gap-sm">
+                                                <a
+                                                    href={`http://localhost:3001${doc.file_path}`}
+                                                    target="_blank"
+                                                    rel="noopener noreferrer"
+                                                    className="btn btn-ghost btn-sm"
+                                                    title="View"
+                                                >
+                                                    👁️
+                                                </a>
+                                                <button
+                                                    className="btn btn-ghost btn-sm"
+                                                    onClick={() => handleDownload(doc)}
+                                                    title="Download"
+                                                >
+                                                    ⬇️
+                                                </button>
+                                                <button
+                                                    className="btn btn-ghost btn-sm text-danger"
+                                                    onClick={() => handleDeleteDocument(doc)}
+                                                    title="Delete"
+                                                >
+                                                    🗑️
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowDocsModal(false)}>Close</button>
+                        </div>
                     </div>
                 </div>
             )}

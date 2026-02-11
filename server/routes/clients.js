@@ -41,15 +41,15 @@ router.get('/:id', (req, res) => {
 
 // POST create client
 router.post('/', (req, res) => {
-    const { name, address, company_id, contacts } = req.body;
+    const { name, address, company_id, invoice_visible_columns, contacts } = req.body;
     if (!name || !company_id) {
         return res.status(400).json({ error: 'Client Name and Company are required' });
     }
 
     const txn = db.transaction(() => {
         const result = db.prepare(
-            'INSERT INTO clients (name, address, company_id) VALUES (?, ?, ?)'
-        ).run(name, address || '', company_id);
+            'INSERT INTO clients (name, address, company_id, invoice_visible_columns) VALUES (?, ?, ?, ?)'
+        ).run(name, address || '', company_id, invoice_visible_columns ? JSON.stringify(invoice_visible_columns) : '[]');
 
         const clientId = result.lastInsertRowid;
 
@@ -65,22 +65,26 @@ router.post('/', (req, res) => {
         return clientId;
     });
 
-    const clientId = txn();
-    const client = db.prepare('SELECT c.*, co.name as company_name FROM clients c JOIN companies co ON c.company_id = co.id WHERE c.id = ?').get(clientId);
-    client.contacts = db.prepare('SELECT * FROM contact_persons WHERE client_id = ?').all(clientId);
-    res.status(201).json(client);
+    try {
+        const clientId = txn();
+        const client = db.prepare('SELECT c.*, co.name as company_name FROM clients c JOIN companies co ON c.company_id = co.id WHERE c.id = ?').get(clientId);
+        client.contacts = db.prepare('SELECT * FROM contact_persons WHERE client_id = ?').all(clientId);
+        res.status(201).json(client);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
 // PUT update client
 router.put('/:id', (req, res) => {
-    const { name, address, company_id, contacts } = req.body;
+    const { name, address, company_id, invoice_visible_columns, contacts } = req.body;
     if (!name || !company_id) {
         return res.status(400).json({ error: 'Client Name and Company are required' });
     }
 
     const txn = db.transaction(() => {
-        db.prepare('UPDATE clients SET name=?, address=?, company_id=? WHERE id=?')
-            .run(name, address || '', company_id, req.params.id);
+        db.prepare('UPDATE clients SET name=?, address=?, company_id=?, invoice_visible_columns=? WHERE id=?')
+            .run(name, address || '', company_id, invoice_visible_columns ? JSON.stringify(invoice_visible_columns) : '[]', req.params.id);
 
         // Replace contacts
         db.prepare('DELETE FROM contact_persons WHERE client_id = ?').run(req.params.id);
@@ -94,10 +98,14 @@ router.put('/:id', (req, res) => {
         }
     });
 
-    txn();
-    const client = db.prepare('SELECT c.*, co.name as company_name FROM clients c JOIN companies co ON c.company_id = co.id WHERE c.id = ?').get(req.params.id);
-    client.contacts = db.prepare('SELECT * FROM contact_persons WHERE client_id = ?').all(req.params.id);
-    res.json(client);
+    try {
+        txn();
+        const client = db.prepare('SELECT c.*, co.name as company_name FROM clients c JOIN companies co ON c.company_id = co.id WHERE c.id = ?').get(req.params.id);
+        client.contacts = db.prepare('SELECT * FROM contact_persons WHERE client_id = ?').all(req.params.id);
+        res.json(client);
+    } catch (err) {
+        res.status(400).json({ error: err.message });
+    }
 });
 
 // DELETE client
