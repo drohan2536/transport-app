@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
 
@@ -9,17 +9,21 @@ const firstDayOfMonth = () => {
     return d.toISOString().split('T')[0];
 };
 
+const emptySubEntryKg = { unit: 'cm', length: '', width: '', gsm: '', packaging: '', no_of_packets: '', weight: '' };
+const emptySubEntryBundle = { no_of_bundles: '' };
+
 const emptyEntry = {
     client_id: '', date: today(), from_location: '', to_location: '',
     has_challan: false, challan_number: '', has_vehicle: false, vehicle_number: '',
     entry_type: 'per_kg',
+    num_entries: 1,
     unit: 'cm', length: '', width: '', gsm: '', packaging: '', no_of_packets: '',
-    weight: '', // Now a state field
+    weight: '',
     rate_per_kg: '',
     no_of_bundles: '', rate_per_bundle: '',
     has_loading_charges: false, loading_charges: '',
-    amount: '', // Now a state field
-    total_amount: '' // Now a state field
+    amount: '',
+    total_amount: ''
 };
 
 export default function Entries() {
@@ -27,6 +31,7 @@ export default function Entries() {
     const [entries, setEntries] = useState([]);
     const [clients, setClients] = useState([]);
     const [form, setForm] = useState({ ...emptyEntry });
+    const [subEntries, setSubEntries] = useState([{ ...emptySubEntryKg }]);
     const [editing, setEditing] = useState(null);
     const [loading, setLoading] = useState(false);
     const [showModal, setShowModal] = useState(false);
@@ -62,28 +67,67 @@ export default function Entries() {
     useEffect(() => { loadClients(); }, []);
     useEffect(() => { loadEntries(); }, [filters]); // Initial load and re-load on filter change
 
-    // Auto-calculation logic
+    // Resize sub-entries when num_entries or entry_type changes
+    useEffect(() => {
+        const count = Math.max(1, parseInt(form.num_entries) || 1);
+        setSubEntries(prev => {
+            const template = form.entry_type === 'per_kg' ? emptySubEntryKg : emptySubEntryBundle;
+            const newArr = [];
+            for (let i = 0; i < count; i++) {
+                newArr.push(prev[i] ? { ...template, ...prev[i] } : { ...template });
+            }
+            return newArr;
+        });
+    }, [form.num_entries, form.entry_type]);
+
+    // Helper: update a single sub-entry field
+    const updateSubEntry = useCallback((index, field, value) => {
+        setSubEntries(prev => {
+            const updated = [...prev];
+            updated[index] = { ...updated[index], [field]: value };
+            return updated;
+        });
+    }, []);
+
+    // Auto-calculate weight for each per_kg sub-entry
+    useEffect(() => {
+        if (form.entry_type !== 'per_kg') return;
+        setSubEntries(prev => {
+            let changed = false;
+            const updated = prev.map(se => {
+                const l = parseFloat(se.length);
+                const w = parseFloat(se.width);
+                const g = parseFloat(se.gsm);
+                const pkg = parseFloat(se.packaging);
+                const packets = parseInt(se.no_of_packets);
+                if (!isNaN(l) && !isNaN(w) && !isNaN(g) && !isNaN(pkg) && !isNaN(packets)) {
+                    const divisor = (se.unit || 'cm') === 'inches' ? 3100 : 20000;
+                    const calcWeight = (l * w * g) / divisor / 5 * pkg * packets;
+                    const newWeight = (Math.round(calcWeight * 100) / 100).toString();
+                    if (se.weight !== newWeight) { changed = true; return { ...se, weight: newWeight }; }
+                } else if (se.weight !== '') {
+                    changed = true; return { ...se, weight: '' };
+                }
+                return se;
+            });
+            return changed ? updated : prev;
+        });
+    }, [subEntries.map(s => `${s.length}|${s.width}|${s.gsm}|${s.packaging}|${s.no_of_packets}|${s.unit}`).join(','), form.entry_type]);
+
+    // Sum sub-entry weights/bundles into the main form
     useEffect(() => {
         if (form.entry_type === 'per_kg') {
-            // Only re-calculate if dependencies are valid numbers
-            const l = parseFloat(form.length);
-            const w = parseFloat(form.width);
-            const g = parseFloat(form.gsm);
-            const pkg = parseFloat(form.packaging);
-            const packets = parseInt(form.no_of_packets);
-
-            if (!isNaN(l) && !isNaN(w) && !isNaN(g) && !isNaN(pkg) && !isNaN(packets)) {
-                const divisor = form.unit === 'inches' ? 3100 : 20000;
-                const calcWeight = (l * w * g) / divisor / 5 * pkg * packets;
-                setForm(prev => ({ ...prev, weight: (Math.round(calcWeight * 100) / 100).toString() }));
-            } else if (form.weight !== '') { // Clear weight if inputs are invalid, but only if it's not already empty
-                setForm(prev => ({ ...prev, weight: '' }));
-            }
-        } else if (form.weight !== '0') { // For per_bundle, weight should be 0
-            setForm(prev => ({ ...prev, weight: '0' }));
+            const totalWeight = subEntries.reduce((sum, se) => sum + (parseFloat(se.weight) || 0), 0);
+            const rounded = (Math.round(totalWeight * 100) / 100).toString();
+            setForm(prev => prev.weight !== rounded ? { ...prev, weight: rounded } : prev);
+        } else {
+            const totalBundles = subEntries.reduce((sum, se) => sum + (parseInt(se.no_of_bundles) || 0), 0);
+            const str = totalBundles.toString();
+            setForm(prev => prev.no_of_bundles !== str ? { ...prev, no_of_bundles: str } : prev);
         }
-    }, [form.length, form.width, form.gsm, form.packaging, form.no_of_packets, form.unit, form.entry_type]);
+    }, [subEntries, form.entry_type]);
 
+    // Amount calculation
     useEffect(() => {
         let amount = 0;
         if (form.entry_type === 'per_kg') {
@@ -107,7 +151,8 @@ export default function Entries() {
 
     const openAdd = () => {
         setEditing(null);
-        setForm({ ...emptyEntry, client_id: filters.client_id || '' }); // Pre-fill client if selected in filter
+        setForm({ ...emptyEntry, client_id: filters.client_id || '' });
+        setSubEntries([{ ...emptySubEntryKg }]);
         setShowModal(true);
     };
 
@@ -123,6 +168,7 @@ export default function Entries() {
             has_vehicle: !!entry.has_vehicle,
             vehicle_number: entry.vehicle_number || '',
             entry_type: entry.entry_type,
+            num_entries: 1,
             unit: entry.unit || 'cm',
             length: entry.length || '',
             width: entry.width || '',
@@ -138,6 +184,22 @@ export default function Entries() {
             amount: entry.amount || '',
             total_amount: entry.total_amount || ''
         });
+        // Populate first sub-entry with saved values
+        if (entry.entry_type === 'per_kg') {
+            setSubEntries([{
+                unit: entry.unit || 'cm',
+                length: entry.length ? entry.length.toString() : '',
+                width: entry.width ? entry.width.toString() : '',
+                gsm: entry.gsm ? entry.gsm.toString() : '',
+                packaging: entry.packaging ? entry.packaging.toString() : '',
+                no_of_packets: entry.no_of_packets ? entry.no_of_packets.toString() : '',
+                weight: entry.weight ? entry.weight.toString() : ''
+            }]);
+        } else {
+            setSubEntries([{
+                no_of_bundles: entry.no_of_bundles ? entry.no_of_bundles.toString() : ''
+            }]);
+        }
         setShowModal(true);
     };
 
@@ -351,42 +413,72 @@ export default function Entries() {
                                     </div>
                                 </div>
 
-                                {/* Per Kg Fields */}
+                                {/* Number of Entries */}
+                                <div className="form-row" style={{ gridTemplateColumns: '1fr' }}>
+                                    <div className="form-group">
+                                        <label className="form-label">Number of Entries</label>
+                                        <input
+                                            className="form-input"
+                                            type="number"
+                                            min="1"
+                                            max="50"
+                                            value={form.num_entries}
+                                            onChange={e => updateField('num_entries', Math.max(1, parseInt(e.target.value) || 1))}
+                                            style={{ maxWidth: '120px' }}
+                                        />
+                                    </div>
+                                </div>
+
+                                {/* Per Kg Sub-Entry Rows */}
                                 {form.entry_type === 'per_kg' && (
                                     <>
-                                        <div className="form-row" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-                                            <div className="form-group">
-                                                <label className="form-label">Unit</label>
-                                                <select className="form-select" value={form.unit} onChange={e => updateField('unit', e.target.value)}>
-                                                    <option value="cm">CM</option>
-                                                    <option value="inches">Inches</option>
-                                                </select>
+                                        {subEntries.map((se, idx) => (
+                                            <div key={idx} style={{ background: idx % 2 === 0 ? 'var(--bg-tertiary, rgba(255,255,255,0.03))' : 'transparent', padding: '10px 8px', borderRadius: '8px', marginBottom: '4px' }}>
+                                                {subEntries.length > 1 && (
+                                                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Entry #{idx + 1}</div>
+                                                )}
+                                                <div className="form-row" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
+                                                    <div className="form-group">
+                                                        <label className="form-label">Unit</label>
+                                                        <select className="form-select" value={se.unit || 'cm'} onChange={e => updateSubEntry(idx, 'unit', e.target.value)}>
+                                                            <option value="cm">CM</option>
+                                                            <option value="inches">Inches</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label className="form-label">Length</label>
+                                                        <input className="form-input" type="number" step="any" value={se.length} onChange={e => updateSubEntry(idx, 'length', e.target.value)} placeholder="0" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label className="form-label">Width</label>
+                                                        <input className="form-input" type="number" step="any" value={se.width} onChange={e => updateSubEntry(idx, 'width', e.target.value)} placeholder="0" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label className="form-label">GSM</label>
+                                                        <input className="form-input" type="number" step="any" value={se.gsm} onChange={e => updateSubEntry(idx, 'gsm', e.target.value)} placeholder="0" />
+                                                    </div>
+                                                </div>
+                                                <div className="form-row" style={{ gridTemplateColumns: 'repeat(3,1fr)' }}>
+                                                    <div className="form-group">
+                                                        <label className="form-label">Packaging</label>
+                                                        <input className="form-input" type="number" step="any" value={se.packaging} onChange={e => updateSubEntry(idx, 'packaging', e.target.value)} placeholder="0" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label className="form-label">No. of Packets</label>
+                                                        <input className="form-input" type="number" value={se.no_of_packets} onChange={e => updateSubEntry(idx, 'no_of_packets', e.target.value)} placeholder="0" />
+                                                    </div>
+                                                    <div className="form-group">
+                                                        <label className="form-label text-accent">Weight (Auto)</label>
+                                                        <input className="form-input" type="number" step="any" value={se.weight} readOnly style={{ borderColor: 'var(--accent-primary)', opacity: 0.85 }} />
+                                                    </div>
+                                                </div>
                                             </div>
+                                        ))}
+                                        {/* Final Weight + Rate */}
+                                        <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
                                             <div className="form-group">
-                                                <label className="form-label">Length</label>
-                                                <input className="form-input" type="number" step="any" value={form.length} onChange={e => updateField('length', e.target.value)} placeholder="0" />
-                                            </div>
-                                            <div className="form-group">
-                                                <label className="form-label">Width</label>
-                                                <input className="form-input" type="number" step="any" value={form.width} onChange={e => updateField('width', e.target.value)} placeholder="0" />
-                                            </div>
-                                            <div className="form-group">
-                                                <label className="form-label">GSM</label>
-                                                <input className="form-input" type="number" step="any" value={form.gsm} onChange={e => updateField('gsm', e.target.value)} placeholder="0" />
-                                            </div>
-                                        </div>
-                                        <div className="form-row" style={{ gridTemplateColumns: 'repeat(4,1fr)' }}>
-                                            <div className="form-group">
-                                                <label className="form-label">Packaging</label>
-                                                <input className="form-input" type="number" step="any" value={form.packaging} onChange={e => updateField('packaging', e.target.value)} placeholder="0" />
-                                            </div>
-                                            <div className="form-group">
-                                                <label className="form-label">No. of Packets</label>
-                                                <input className="form-input" type="number" value={form.no_of_packets} onChange={e => updateField('no_of_packets', e.target.value)} placeholder="0" />
-                                            </div>
-                                            <div className="form-group">
-                                                <label className="form-label text-accent">Weight (Auto)</label>
-                                                <input className="form-input" type="number" step="any" value={form.weight} onChange={e => updateField('weight', e.target.value)} style={{ borderColor: 'var(--accent-primary)' }} />
+                                                <label className="form-label" style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '0.95rem' }}>⚖️ Final Weight (Total)</label>
+                                                <input className="form-input" type="number" step="any" value={form.weight} readOnly style={{ borderColor: 'var(--accent-primary)', fontWeight: 700, fontSize: '1.1rem', background: 'var(--bg-tertiary, rgba(255,255,255,0.05))' }} />
                                             </div>
                                             <div className="form-group">
                                                 <label className="form-label">Rate per Kg (₹)</label>
@@ -396,18 +488,34 @@ export default function Entries() {
                                     </>
                                 )}
 
-                                {/* Per Bundle Fields */}
+                                {/* Per Bundle Sub-Entry Rows */}
                                 {form.entry_type === 'per_bundle' && (
-                                    <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
-                                        <div className="form-group">
-                                            <label className="form-label">No. of Bundles</label>
-                                            <input className="form-input" type="number" value={form.no_of_bundles} onChange={e => updateField('no_of_bundles', e.target.value)} placeholder="0" />
+                                    <>
+                                        {subEntries.map((se, idx) => (
+                                            <div key={idx} style={{ background: idx % 2 === 0 ? 'var(--bg-tertiary, rgba(255,255,255,0.03))' : 'transparent', padding: '10px 8px', borderRadius: '8px', marginBottom: '4px' }}>
+                                                {subEntries.length > 1 && (
+                                                    <div style={{ fontSize: '0.8rem', fontWeight: 600, color: 'var(--text-secondary)', marginBottom: '6px' }}>Entry #{idx + 1}</div>
+                                                )}
+                                                <div className="form-row" style={{ gridTemplateColumns: '1fr' }}>
+                                                    <div className="form-group">
+                                                        <label className="form-label">No. of Bundles</label>
+                                                        <input className="form-input" type="number" value={se.no_of_bundles} onChange={e => updateSubEntry(idx, 'no_of_bundles', e.target.value)} placeholder="0" />
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        {/* Final Quantity + Rate */}
+                                        <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                                            <div className="form-group">
+                                                <label className="form-label" style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '0.95rem' }}>📦 Final Quantity (Total Bundles)</label>
+                                                <input className="form-input" type="number" value={form.no_of_bundles} readOnly style={{ borderColor: 'var(--accent-primary)', fontWeight: 700, fontSize: '1.1rem', background: 'var(--bg-tertiary, rgba(255,255,255,0.05))' }} />
+                                            </div>
+                                            <div className="form-group">
+                                                <label className="form-label">Rate per Bundle (₹)</label>
+                                                <input className="form-input" type="number" step="any" value={form.rate_per_bundle} onChange={e => updateField('rate_per_bundle', e.target.value)} placeholder="0.00" />
+                                            </div>
                                         </div>
-                                        <div className="form-group">
-                                            <label className="form-label">Rate per Bundle (₹)</label>
-                                            <input className="form-input" type="number" step="any" value={form.rate_per_bundle} onChange={e => updateField('rate_per_bundle', e.target.value)} placeholder="0.00" />
-                                        </div>
-                                    </div>
+                                    </>
                                 )}
 
                                 {/* Loading Charges + Totals */}

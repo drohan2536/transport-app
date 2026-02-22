@@ -1,4 +1,7 @@
 import logoUrl from '../assets/logo.svg';
+import { devanagariBase64 } from '../assets/devanagariFont.js';
+import * as pdfFonts from 'pdfmake/build/vfs_fonts';
+import pdfMake from 'pdfmake/build/pdfmake';
 
 // Helper to convert image URL to Base64
 export const getBase64ImageFromURL = (url) => {
@@ -34,6 +37,44 @@ export const loadLogoBase64 = async () => {
     }
 };
 
+// Setup fonts for pdfMake
+export const setupPdfFonts = (vfsObj) => {
+    // If vfsObj is provided, use it. Otherwise, try to extract the base vfs from the imported pdfFonts module.
+    // Vite CJS-to-ESM interop might put the vfs object in .default, or it might be the module namespace itself.
+    const baseVfs = vfsObj || (pdfFonts && pdfFonts.pdfMake && pdfFonts.pdfMake.vfs) || pdfFonts?.vfs || pdfFonts?.default || pdfFonts || {};
+
+    const finalVfs = { ...baseVfs };
+
+    // Inject custom font map
+    finalVfs['Mangal.ttf'] = devanagariBase64;
+
+    const fonts = {
+        Roboto: {
+            normal: 'Roboto-Regular.ttf',
+            bold: 'Roboto-Medium.ttf',
+            italics: 'Roboto-Italic.ttf',
+            bolditalics: 'Roboto-MediumItalic.ttf'
+        },
+        Mangal: {
+            normal: 'Mangal.ttf',
+            bold: 'Mangal.ttf',
+            italics: 'Mangal.ttf',
+            bolditalics: 'Mangal.ttf'
+        }
+    };
+
+    // Also update global pdfMake straight away for convenience if needed
+    pdfMake.vfs = finalVfs;
+    pdfMake.fonts = fonts;
+
+    return { fonts, vfs: finalVfs };
+};
+
+// Initialize fonts right away
+setupPdfFonts();
+
+export { pdfMake };
+
 export function buildPdfDefinition(invoice, logoBase64) {
     const entries = invoice.entries || [];
 
@@ -60,124 +101,228 @@ export function buildPdfDefinition(invoice, logoBase64) {
         gsm: { header: 'GSM', width: 'auto', val: e => e.gsm },
         packaging: { header: 'Pkg', width: 'auto', val: e => e.packaging },
         no_of_packets: { header: 'Pkt', width: 'auto', val: e => e.no_of_packets },
-        weight: { header: 'Wgt', width: 'auto', align: 'right', val: e => e.weight },
+        weight: { header: 'Weight', width: 'auto', align: 'right', val: e => e.weight },
         rate_per_kg: { header: 'Rate/Kg', width: 'auto', align: 'right', val: e => e.rate_per_kg },
-        no_of_bundles: { header: 'Bdls', width: 'auto', val: e => e.no_of_bundles },
+        no_of_bundles: { header: 'Bundles', width: 'auto', val: e => e.no_of_bundles },
         rate_per_bundle: { header: 'Rate/Bdl', width: 'auto', align: 'right', val: e => e.rate_per_bundle },
-        amount: { header: 'Amt', width: 'auto', align: 'right', val: e => `₹${(e.amount || 0).toFixed(2)}` },
-        loading_charges: { header: 'Load', width: 'auto', align: 'right', val: e => e.loading_charges ? `₹${e.loading_charges}` : '-' },
-        total_amount: { header: 'Total', width: 'auto', align: 'right', bold: true, val: e => `₹${(e.total_amount || 0).toFixed(2)}` },
+        amount: { header: 'Amount', width: 'auto', align: 'right', val: e => `${(e.amount || 0).toFixed(2)}/-` },
+        loading_charges: { header: 'Loading', width: 'auto', align: 'right', val: e => e.loading_charges ? `${e.loading_charges}/-` : '-' },
+        total_amount: { header: 'Total', width: 'auto', align: 'right', bold: true, val: e => `${(e.total_amount || 0).toFixed(2)}/-` },
     };
 
-    // Always include Index
-    const tableHeaders = [{ text: '#', style: 'tableHeader', alignment: 'center' }];
-    const tableWidths = [20];
+    // Build table headers — always include Sr. no.
+    const tableHeaders = [{ text: 'Sr. no.', bold: true, alignment: 'center', fontSize: 9 }];
+    const tableWidths = [30];
 
     visibleColIds.forEach(id => {
         const def = colDefs[id];
         if (def) {
-            tableHeaders.push({ text: def.header, style: 'tableHeader', alignment: def.align || 'left' });
+            tableHeaders.push({ text: def.header, bold: true, alignment: def.align || 'center', fontSize: 9 });
             tableWidths.push(def.width || 'auto');
         }
     });
 
     const tableBody = [tableHeaders];
 
+    // Data rows
     entries.forEach((e, i) => {
-        const row = [{ text: (i + 1).toString(), alignment: 'center' }];
+        const row = [{ text: (i + 1).toString(), alignment: 'center', fontSize: 9 }];
         visibleColIds.forEach(id => {
             const def = colDefs[id];
             if (def) {
-                row.push({ text: getVal(e, id, '-') && def.val(e), alignment: def.align || 'left', bold: def.bold || false });
+                let cellVal = def.val(e);
+                if (cellVal === undefined || cellVal === null || cellVal === '') cellVal = '-';
+                row.push({
+                    text: String(cellVal),
+                    alignment: def.align || 'left',
+                    bold: def.bold || false,
+                    fontSize: 9
+                });
             }
         });
         tableBody.push(row);
     });
 
-    const content = [
-        { text: invoice.company_name, style: 'companyName', alignment: 'center' },
-        { text: invoice.company_address || '', alignment: 'center', fontSize: 10, color: '#666', margin: [0, 0, 0, 2] },
-        { text: invoice.company_phone ? `Phone: ${invoice.company_phone}` : '', alignment: 'center', fontSize: 9, color: '#999', margin: [0, 0, 0, 15] },
-        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#ddd' }], margin: [0, 0, 0, 15] },
-        {
-            columns: [
-                {
-                    width: '50%',
-                    stack: [
-                        { text: 'BILL TO', style: 'sectionLabel' },
-                        { text: invoice.client_name, bold: true, fontSize: 12 },
-                        { text: invoice.client_address || '', fontSize: 10, color: '#666' },
-                    ],
-                },
-                {
-                    width: '50%',
-                    alignment: 'right',
-                    stack: [
-                        { text: 'INVOICE', style: 'sectionLabel', alignment: 'right' },
-                        { text: `#${invoice.invoice_number}`, bold: true, fontSize: 14, color: '#6366f1' },
-                        { text: `Date: ${invoice.invoice_date}`, fontSize: 10, color: '#666' },
-                        { text: `Period: ${invoice.from_date} to ${invoice.to_date}`, fontSize: 9, color: '#999' },
-                    ],
-                },
-            ],
-            margin: [0, 0, 0, 20],
-        },
-        {
-            table: { headerRows: 1, widths: tableWidths, body: tableBody },
-            layout: {
-                hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length) ? 1 : 0.5,
-                vLineWidth: () => 0,
-                hLineColor: (i) => i <= 1 ? '#ccc' : '#eee',
-                paddingTop: () => 6,
-                paddingBottom: () => 6,
-                fillColor: (i) => i === 0 ? '#f8f9fa' : null,
-            },
-        },
-        {
+    // Total Amount row — spans all columns except the last one
+    const totalColCount = 1 + visibleColIds.length; // Sr. no. + visible cols
+    const totalRow = [];
+    if (totalColCount > 2) {
+        totalRow.push({ text: '', border: [true, true, false, true] }); // Sr. no. cell empty
+        totalRow.push({
+            text: 'Total Amount',
+            bold: true,
+            fontSize: 10,
+            color: '#1e3a8a', // Dark blue
+            alignment: 'center',
+            colSpan: totalColCount - 2,
+            border: [false, true, true, true]
+        });
+        // Fill colSpan placeholders
+        for (let i = 0; i < totalColCount - 3; i++) {
+            totalRow.push({});
+        }
+        totalRow.push({
+            text: `${(invoice.final_amount || 0).toFixed(2)}/-`,
+            bold: true,
+            fontSize: 10,
+            color: '#1e3a8a', // Dark blue
+            alignment: 'right'
+        });
+    } else {
+        // Fallback for very few columns
+        totalRow.push({ text: 'Total Amount', bold: true, fontSize: 10, color: '#1e3a8a', alignment: 'center' });
+        totalRow.push({ text: `${(invoice.final_amount || 0).toFixed(2)}/-`, bold: true, fontSize: 10, color: '#1e3a8a', alignment: 'right' });
+    }
+    tableBody.push(totalRow);
+
+    // --- Build content ---
+    const content = [];
+
+    // 1. Sanskrit Header
+    content.push({
+        text: '॥ श्री कृष्णं वन्दे जगद्गुरुम् ॥',
+        font: 'Mangal',
+        bold: true,
+        fontSize: 11,
+        color: '#dc2626', // Deep red for Sanskrit header
+        alignment: 'center',
+        margin: [0, 0, 0, 6]
+    });
+
+    // 2. Company Logo + Name
+    if (logoBase64) {
+        content.push({
             columns: [
                 { width: '*', text: '' },
+                { image: logoBase64, width: 70, alignment: 'center' },
                 {
                     width: 'auto',
-                    stack: [
-                        { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 180, y2: 0, lineWidth: 2, lineColor: '#e2e8f0' }], margin: [0, 10, 0, 8] },
-                        { text: 'TOTAL AMOUNT', fontSize: 9, color: '#999', alignment: 'right' },
-                        { text: `₹${(invoice.final_amount || 0).toFixed(2)}`, fontSize: 20, bold: true, alignment: 'right', color: '#1a1a2e' },
-                    ],
+                    text: invoice.company_name || 'TEMPO SERVICES',
+                    bold: true,
+                    fontSize: 18,
+                    color: '#1e40af', // Blue company name
+                    alignment: 'center',
+                    margin: [10, 8, 10, 0]
                 },
+                { image: logoBase64, width: 70, alignment: 'center' },
+                { width: '*', text: '' },
             ],
-        },
-    ];
+            margin: [0, 0, 0, 4]
+        });
+    } else {
+        content.push({
+            text: invoice.company_name || 'Transport Company', style: 'companyName', alignment: 'center'
+        });
+        content.push({ text: invoice.company_address || '', alignment: 'center', fontSize: 10, color: '#666', margin: [0, 0, 0, 2] });
+    }
 
-    // Insert logo if available
-    if (logoBase64) {
-        content.unshift({
-            image: logoBase64,
-            width: 50,
+    // 3. Company Address + Phone
+    const addressParts = [];
+    if (invoice.company_address) addressParts.push(invoice.company_address);
+    if (invoice.company_phone) addressParts.push(`Mob. no. : ${invoice.company_phone}`);
+    if (addressParts.length > 0) {
+        content.push({
+            text: addressParts.join('. ') + '.',
+            fontSize: 9,
             alignment: 'center',
-            margin: [0, 0, 0, 10]
+            margin: [0, 0, 0, 12]
         });
     }
 
+    // 4. Client Name + Bill Number row
+    content.push({
+        columns: [
+            {
+                width: '60%',
+                text: [
+                    { text: 'Company Name :-  ', fontSize: 10, color: '#475569' },
+                    { text: invoice.client_name || 'Client', bold: true, fontSize: 13, color: '#0f172a' },
+                ]
+            },
+            {
+                width: '40%',
+                alignment: 'right',
+                text: [
+                    { text: 'Bill no. : ', fontSize: 10, color: '#475569' },
+                    { text: invoice.invoice_number || '', bold: true, fontSize: 11, color: '#dc2626' }
+                ]
+            }
+        ],
+        margin: [0, 8, 0, 2] // Added top margin
+    });
+
+    // Client Address
+    if (invoice.client_address) {
+        content.push({
+            text: invoice.client_address,
+            fontSize: 10,
+            color: '#666',
+            margin: [0, 4, 0, 8] // top, right, bottom, left
+        });
+    }
+
+    // 5. Date row
+    content.push({
+        text: [
+            { text: 'Date    :  ', fontSize: 10 },
+            { text: invoice.invoice_date || '', bold: true, fontSize: 10 }
+        ],
+        alignment: 'right',
+        margin: [0, 0, 0, 10]
+    });
+
+    // 6. Data Table with full borders
+    content.push({
+        table: {
+            headerRows: 1,
+            widths: tableWidths,
+            body: tableBody
+        },
+        layout: {
+            hLineWidth: () => 0.8,
+            vLineWidth: () => 0.8,
+            hLineColor: () => '#555555',
+            vLineColor: () => '#555555',
+            paddingTop: () => 5,
+            paddingBottom: () => 5,
+            paddingLeft: () => 4,
+            paddingRight: () => 4,
+        },
+    });
+
+    // 7. Footer — PAN + Owner/Signatory & background border
     return {
+        background: function (currentPage, pageSize) {
+            return {
+                canvas: [
+                    { type: 'rect', x: 20, y: 20, w: pageSize.width - 40, h: pageSize.height - 40, lineWidth: 1.5, lineColor: '#1e3a8a' }
+                ]
+            };
+        },
         content,
         footer: (currentPage, pageCount) => {
             return {
-                stack: [
-                    { canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 0.5, lineColor: '#ddd' }], margin: [40, 0, 40, 10] },
+                columns: [
                     {
-                        columns: [
-                            { text: invoice.owner_name ? `Authorized Signatory: ${invoice.owner_name}` : '', fontSize: 9, color: '#666', margin: [40, 0, 0, 0] },
-                            { text: invoice.pan_id ? `PAN: ${invoice.pan_id}` : '', fontSize: 9, color: '#666', alignment: 'right', margin: [0, 0, 40, 0] },
-                        ],
+                        text: invoice.pan_id ? `PAN NO. :- ${invoice.pan_id}` : '',
+                        bold: true,
+                        fontSize: 9,
+                        margin: [40, 10, 0, 0]
+                    },
+                    {
+                        text: invoice.owner_name || '',
+                        bold: true,
+                        fontSize: 9,
+                        alignment: 'right',
+                        margin: [0, 10, 40, 0]
                     }
                 ]
             };
         },
         styles: {
-            companyName: { fontSize: 20, bold: true, color: '#1a1a2e', margin: [0, 0, 0, 4] },
-            sectionLabel: { fontSize: 8, bold: true, color: '#999', letterSpacing: 1, margin: [0, 0, 0, 4] },
-            tableHeader: { bold: true, fontSize: 8, color: '#555' },
+            tableHeader: { bold: true, fontSize: 9 },
         },
         defaultStyle: { font: 'Roboto', fontSize: 10 },
+        pageMargins: [40, 40, 40, 60],
     };
 }

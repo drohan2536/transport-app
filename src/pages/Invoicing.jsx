@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
-import pdfMake from 'pdfmake/build/pdfmake';
-import * as pdfFonts from 'pdfmake/build/vfs_fonts';
-import { buildPdfDefinition, loadLogoBase64 } from '../utils/pdfGenerator.js';
-
-pdfMake.vfs = pdfFonts.default?.pdfMake?.vfs || pdfFonts.pdfMake?.vfs || pdfFonts.vfs;
+import { buildPdfDefinition, loadLogoBase64, pdfMake } from '../utils/pdfGenerator.js';
 
 export default function Invoicing() {
     const showToast = useToast();
@@ -82,16 +78,20 @@ export default function Invoicing() {
             });
             showToast('Invoice created successfully! 🎉');
 
-            // Auto-download PDF
-            try {
-                const logoBase64 = await loadLogoBase64();
-                const docDef = buildPdfDefinition(newInvoice, logoBase64);
-                pdfMake.createPdf(docDef).download(`Invoice_${newInvoice.invoice_number}.pdf`);
+            const docDef = buildPdfDefinition(newInvoice, logoBase64);
+            pdfMake.createPdf(docDef).getBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Invoice_${newInvoice.invoice_number}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 1000);
                 showToast('PDF downloaded automatically');
-            } catch (pdfErr) {
-                console.error('Auto-download failed', pdfErr);
-                showToast('Invoice created, but PDF auto-download failed. You can download it from Dashboard.', 'warning');
-            }
+            });
 
             setShowPreview(false);
             setEntries([]);
@@ -190,72 +190,124 @@ export default function Invoicing() {
                     </div>
 
                     <div className="invoice-preview">
+                        {/* Sanskrit Header */}
+                        <div style={{ textAlign: 'center', fontWeight: 700, fontSize: '1rem', marginBottom: 6 }}>
+                            ॥ श्री कृष्णं वन्दे जगद्गुरुम् ॥
+                        </div>
+
+                        {/* Company Name */}
                         <div className="inv-header">
-                            <h1>{invoiceData.company_name}</h1>
-                            {client && <p>{client.address}</p>}
+                            <h1 style={{ margin: '4px 0' }}>{invoiceData.company_name || client?.company_name}</h1>
+                            <p style={{ margin: '2px 0' }}>
+                                {client?.company_address || ''}{client?.company_phone ? `. Mob. no. : ${client.company_phone}` : ''}
+                            </p>
                         </div>
 
-                        <div className="inv-meta">
-                            <div className="inv-meta-block">
-                                <h3>Bill To</h3>
-                                <p style={{ fontWeight: 600 }}>{client?.name}</p>
-                                <p>{client?.address}</p>
+                        {/* Client Name + Bill Number */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '14px 0 2px' }}>
+                            <div>
+                                <span>Company Name :-&nbsp;&nbsp;</span>
+                                <strong style={{ fontSize: '1.05rem' }}>{client?.name}</strong>
                             </div>
-                            <div className="inv-meta-block" style={{ textAlign: 'right' }}>
-                                <h3>Invoice Details</h3>
-                                <p><strong>Date:</strong> {invoiceDate}</p>
-                                <p><strong>Period:</strong> {fromDate} to {toDate}</p>
-                                <p style={{ color: 'var(--text-muted)', fontSize: '0.8rem' }}>Invoice # assigned on save</p>
+                            <div>
+                                <span>Bill no. :&nbsp;</span>
+                                <strong style={{ fontSize: '1.05rem', color: 'var(--text-muted)' }}>Assigned on save</strong>
                             </div>
                         </div>
 
-                        {/* Dynamic Table Rendering */}
-                        <table>
+                        {/* Client Address */}
+                        {client?.address && (
+                            <div style={{ marginBottom: 4, fontSize: '0.92rem', color: 'var(--text-secondary)' }}>
+                                {client.address}
+                            </div>
+                        )}
+
+                        {/* Date */}
+                        <div style={{ textAlign: 'right', marginBottom: 12 }}>
+                            <span>Date&nbsp;&nbsp;:&nbsp;&nbsp;</span><strong>{invoiceDate}</strong>
+                            <span style={{ marginLeft: 16, fontSize: '0.85rem', color: '#888' }}>
+                                (Period: {fromDate} to {toDate})
+                            </span>
+                        </div>
+
+                        {/* Bordered Table */}
+                        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
                             <thead>
                                 <tr>
-                                    <th>#</th>
-                                    {(JSON.parse(client?.invoice_visible_columns || '[]').length > 0 ? JSON.parse(client.invoice_visible_columns) : ['date', 'from_location', 'to_location', 'entry_type', 'challan_number', 'vehicle_number', 'amount', 'loading_charges', 'total_amount']).map(colId => {
+                                    <th style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center' }}>Sr. no.</th>
+                                    {(() => {
+                                        const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
+                                        const cols = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'weight', 'amount'];
                                         const labelMap = {
                                             date: 'Date', from_location: 'From', to_location: 'To', entry_type: 'Type',
                                             challan_number: 'Challan', vehicle_number: 'Vehicle',
-                                            amount: 'Amount', loading_charges: 'Charges', total_amount: 'Total',
+                                            amount: 'Amount', loading_charges: 'Loading', total_amount: 'Total',
                                             unit: 'Unit', length: 'L', width: 'W', gsm: 'GSM', packaging: 'Pkg',
-                                            no_of_packets: 'Pkt', weight: 'Wgt', rate_per_kg: 'Rate/Kg',
-                                            no_of_bundles: 'Bdls', rate_per_bundle: 'Rate/Bdl'
+                                            no_of_packets: 'Pkt', weight: 'Weight', rate_per_kg: 'Rate/Kg',
+                                            no_of_bundles: 'Bundles', rate_per_bundle: 'Rate/Bdl'
                                         };
-                                        return <th key={colId} className={['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle'].includes(colId) ? 'text-right' : ''}>{labelMap[colId] || colId}</th>;
-                                    })}
+                                        const rightAlign = ['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle'];
+                                        return cols.map(colId => (
+                                            <th key={colId} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: rightAlign.includes(colId) ? 'right' : 'left' }}>
+                                                {labelMap[colId] || colId}
+                                            </th>
+                                        ));
+                                    })()}
                                 </tr>
                             </thead>
                             <tbody>
                                 {selectedEntries.map((e, i) => {
                                     const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
-                                    const colsToRender = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'entry_type', 'challan_number', 'vehicle_number', 'amount', 'loading_charges', 'total_amount'];
-
+                                    const cols = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'weight', 'amount'];
+                                    const rightAlign = ['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle'];
                                     return (
                                         <tr key={e.id}>
-                                            <td>{i + 1}</td>
-                                            {colsToRender.map(colId => {
+                                            <td style={{ border: '1px solid #333', padding: '5px 8px', textAlign: 'center' }}>{i + 1}.</td>
+                                            {cols.map(colId => {
                                                 let val = e[colId];
-                                                // Format specific fields
                                                 if (colId === 'entry_type') val = e.entry_type === 'per_kg' ? 'Kg' : 'Bundle';
                                                 else if (colId === 'challan_number') val = e.has_challan ? e.challan_number : '—';
                                                 else if (colId === 'vehicle_number') val = e.has_vehicle ? e.vehicle_number : '—';
-                                                else if (['amount', 'loading_charges', 'total_amount'].includes(colId)) val = `₹${(e[colId] || 0).toFixed(2)}`;
-                                                else if (['weight', 'rate_per_kg', 'rate_per_bundle'].includes(colId)) val = (e[colId] || 0);
+                                                else if (colId === 'weight') val = e.entry_type === 'per_kg' ? (e.weight ? `${e.weight} Kg` : '—') : (e.no_of_bundles ? `${e.no_of_bundles} Bundles` : '—');
+                                                else if (['amount', 'loading_charges', 'total_amount'].includes(colId)) val = `${(e[colId] || 0).toFixed(2)}/-`;
+                                                else if (['rate_per_kg', 'rate_per_bundle'].includes(colId)) val = (e[colId] || 0);
 
-                                                const isRight = ['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle'].includes(colId);
-                                                return <td key={colId} className={isRight ? 'text-right' : ''} style={colId === 'total_amount' ? { fontWeight: 600 } : {}}>{val !== undefined && val !== null ? val : '—'}</td>;
+                                                return (
+                                                    <td key={colId} style={{
+                                                        border: '1px solid #333', padding: '5px 8px',
+                                                        textAlign: rightAlign.includes(colId) ? 'right' : 'left',
+                                                        fontWeight: colId === 'total_amount' ? 600 : 'normal'
+                                                    }}>
+                                                        {val !== undefined && val !== null ? val : '—'}
+                                                    </td>
+                                                );
                                             })}
                                         </tr>
                                     );
                                 })}
+                                {/* Total Amount Row */}
+                                {(() => {
+                                    const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
+                                    const cols = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'weight', 'amount'];
+                                    return (
+                                        <tr>
+                                            <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                            <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1rem' }}>
+                                                Total Amount
+                                            </td>
+                                            <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1rem' }}>
+                                                {totalAmount.toFixed(2)}/-
+                                            </td>
+                                        </tr>
+                                    );
+                                })()}
                             </tbody>
                         </table>
 
-                        <div className="inv-total">
-                            <div className="label">Total Amount</div>
-                            <div className="amount">₹{totalAmount.toFixed(2)}</div>
+                        {/* Footer: PAN + Owner */}
+                        <div className="inv-footer" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+                            <div style={{ fontWeight: 600 }}>{client?.pan_id && `PAN NO. :- ${client.pan_id}`}</div>
+                            <div style={{ fontWeight: 600 }}>{client?.owner_name || ''}</div>
                         </div>
                     </div>
                 </div>
