@@ -103,12 +103,16 @@ router.post('/', (req, res) => {
     try {
         const invoiceId = txn();
         const invoice = db.prepare(`
-      SELECT i.*, c.name as client_name, co.name as company_name
+      SELECT i.*, c.name as client_name, c.address as client_address, c.invoice_visible_columns,
+        co.name as company_name, co.address as company_address,
+        co.phone as company_phone, co.email as company_email,
+        co.owner_name, co.pan_id
       FROM invoices i
       JOIN clients c ON i.client_id = c.id
       JOIN companies co ON i.company_id = co.id
       WHERE i.id = ?
     `).get(invoiceId);
+        invoice.entries = db.prepare('SELECT * FROM entries WHERE invoice_id = ? ORDER BY date').all(invoiceId);
         res.status(201).json(invoice);
     } catch (err) {
         res.status(400).json({ error: err.message });

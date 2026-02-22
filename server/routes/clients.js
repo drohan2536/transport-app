@@ -6,7 +6,7 @@ const router = Router();
 // GET all clients (with contacts and company name)
 router.get('/', (req, res) => {
     const clients = db.prepare(`
-    SELECT c.*, co.name as company_name 
+    SELECT c.*, co.name as company_name, co.address as company_address, co.phone as company_phone, co.owner_name, co.pan_id 
     FROM clients c 
     JOIN companies co ON c.company_id = co.id 
     ORDER BY c.name

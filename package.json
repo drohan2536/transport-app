@@ -11,6 +11,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fontsource/noto-sans-devanagari": "^5.2.8",
     "better-sqlite3": "^11.7.0",
     "concurrently": "^9.1.0",
     "cors": "^2.8.5",

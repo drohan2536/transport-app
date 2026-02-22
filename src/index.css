@@ -634,10 +634,19 @@ tbody td {
   color: var(--text-primary);
 }
 
+.modal > form {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex: 1;
+  min-height: 0;
+}
+
 .modal-body {
   padding: var(--space-lg);
   overflow-y: auto;
   flex: 1;
+  min-height: 0;
 }
 
 .modal-footer {

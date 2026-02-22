@@ -1,11 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
-import pdfMake from 'pdfmake/build/pdfmake';
-import * as pdfFonts from 'pdfmake/build/vfs_fonts';
-import { buildPdfDefinition, loadLogoBase64 } from '../utils/pdfGenerator.js';
-
-pdfMake.vfs = pdfFonts.default?.pdfMake?.vfs || pdfFonts.pdfMake?.vfs || pdfFonts.vfs;
+import { buildPdfDefinition, loadLogoBase64, pdfMake } from '../utils/pdfGenerator.js';
 
 export default function Dashboard() {
     const showToast = useToast();
@@ -45,9 +41,23 @@ export default function Dashboard() {
             const logoBase64 = await loadLogoBase64();
 
             const docDef = buildPdfDefinition(full, logoBase64);
-            pdfMake.createPdf(docDef).download(`Invoice_${full.invoice_number}.pdf`);
-            showToast('PDF downloaded');
-        } catch (e) { showToast(e.message, 'error'); }
+            pdfMake.createPdf(docDef).getBlob((blob) => {
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `Invoice_${full.invoice_number}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    URL.revokeObjectURL(url);
+                }, 1000);
+                showToast('PDF downloaded successfully! 🎉');
+            });
+        } catch (e) {
+            console.error('PDF Generation Error:', e);
+            showToast('Failed to generate PDF: ' + e.message, 'error');
+        }
     };
 
     const handleEmail = async (inv) => {
@@ -61,14 +71,22 @@ export default function Dashboard() {
             const logoBase64 = await loadLogoBase64();
 
             // Generate PDF as base64
+            const vfsObj = pdfFonts.default?.pdfMake?.vfs || pdfFonts.pdfMake?.vfs || pdfFonts.vfs;
+            const { fonts, vfs } = setupPdfFonts(vfsObj);
             const docDef = buildPdfDefinition(full, logoBase64);
-            pdfMake.createPdf(docDef).getBase64(async (base64) => {
+            pdfMake.createPdf(docDef, null, fonts, vfs).getBase64(async (base64) => {
                 try {
                     await api.emailInvoice(inv.id, base64);
-                    showToast(`Invoice emailed to ${full.client_email}`);
-                } catch (e) { showToast(e.message, 'error'); }
+                    showToast(`Invoice emailed to ${full.client_email} ✉️`);
+                } catch (e) {
+                    console.error('Email Error:', e);
+                    showToast('Failed to email invoice: ' + e.message, 'error');
+                }
             });
-        } catch (e) { showToast(e.message, 'error'); }
+        } catch (e) {
+            console.error('PDF Generation Error (Email):', e);
+            showToast('Failed to prepare email: ' + e.message, 'error');
+        }
     };
 
     const handleView = async (inv) => {
@@ -190,63 +208,86 @@ export default function Dashboard() {
                         </div>
                         <div className="modal-body">
                             <div className="invoice-preview">
+                                {/* Sanskrit Header */}
+                                <div style={{ textAlign: 'center', fontWeight: 700, fontSize: '1rem', marginBottom: 6 }}>
+                                    ॥ श्री कृष्णं वन्दे जगद्गुरुम् ॥
+                                </div>
+
+                                {/* Company Name */}
                                 <div className="inv-header">
-                                    <h1>{viewInvoice.company_name}</h1>
-                                    <p>{viewInvoice.company_address}</p>
-                                    {viewInvoice.company_phone && <p>Phone: {viewInvoice.company_phone}</p>}
+                                    <h1 style={{ margin: '4px 0' }}>{viewInvoice.company_name}</h1>
+                                    <p style={{ margin: '2px 0' }}>{viewInvoice.company_address}{viewInvoice.company_phone ? `. Mob. no. : ${viewInvoice.company_phone}` : ''}</p>
                                 </div>
 
-                                <div className="inv-meta">
-                                    <div className="inv-meta-block">
-                                        <h3>Bill To</h3>
-                                        <p style={{ fontWeight: 600 }}>{viewInvoice.client_name}</p>
-                                        <p>{viewInvoice.client_address}</p>
-                                    </div>
-                                    <div className="inv-meta-block" style={{ textAlign: 'right' }}>
-                                        <h3>Invoice</h3>
-                                        <p style={{ fontSize: '1.1rem', fontWeight: 700, color: '#6366f1' }}>#{viewInvoice.invoice_number}</p>
-                                        <p>Date: {viewInvoice.invoice_date}</p>
-                                        <p style={{ fontSize: '0.8rem' }}>Period: {viewInvoice.from_date} to {viewInvoice.to_date}</p>
-                                    </div>
+                                {/* Client Name + Bill Number */}
+                                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', margin: '14px 0 2px' }}>
+                                    <div><span>Company Name :-&nbsp;&nbsp;</span><strong style={{ fontSize: '1.05rem' }}>{viewInvoice.client_name}</strong></div>
+                                    <div><span>Bill no. :&nbsp;</span><strong style={{ fontSize: '1.05rem' }}>{viewInvoice.invoice_number}</strong></div>
                                 </div>
 
-                                <table>
+                                {/* Client Address */}
+                                {viewInvoice.client_address && (
+                                    <div style={{ marginBottom: 4, fontSize: '0.92rem', color: 'var(--text-secondary)' }}>
+                                        {viewInvoice.client_address}
+                                    </div>
+                                )}
+
+                                {/* Date */}
+                                <div style={{ textAlign: 'right', marginBottom: 12 }}>
+                                    <span>Date&nbsp;&nbsp;:&nbsp;&nbsp;</span><strong>{viewInvoice.invoice_date}</strong>
+                                    {viewInvoice.from_date && viewInvoice.to_date && (
+                                        <span style={{ marginLeft: 16, fontSize: '0.85rem', color: '#888' }}>
+                                            (Period: {viewInvoice.from_date} to {viewInvoice.to_date})
+                                        </span>
+                                    )}
+                                </div>
+
+                                {/* Bordered Table */}
+                                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
                                     <thead>
                                         <tr>
-                                            <th>#</th>
-                                            <th>Date</th>
-                                            <th>Route</th>
-                                            <th>Type</th>
-                                            <th>Challan</th>
-                                            <th className="text-right">Amount</th>
-                                            <th className="text-right">Charges</th>
-                                            <th className="text-right">Total</th>
+                                            <th style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center' }}>Sr. no.</th>
+                                            <th style={{ border: '1px solid #333', padding: '6px 8px' }}>Date</th>
+                                            <th style={{ border: '1px solid #333', padding: '6px 8px' }}>From</th>
+                                            <th style={{ border: '1px solid #333', padding: '6px 8px' }}>To</th>
+                                            <th style={{ border: '1px solid #333', padding: '6px 8px' }}>Weight / Bundles</th>
+                                            <th style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right' }}>Amount</th>
                                         </tr>
                                     </thead>
                                     <tbody>
                                         {(viewInvoice.entries || []).map((e, i) => (
                                             <tr key={e.id}>
-                                                <td>{i + 1}</td>
-                                                <td>{e.date}</td>
-                                                <td>{e.from_location && e.to_location ? `${e.from_location} → ${e.to_location}` : '—'}</td>
-                                                <td>{e.entry_type === 'per_kg' ? 'Per Kg' : 'Per Bundle'}</td>
-                                                <td>{e.has_challan ? e.challan_number : '—'}</td>
-                                                <td className="text-right">₹{(e.amount || 0).toFixed(2)}</td>
-                                                <td className="text-right">{e.loading_charges > 0 ? `₹${e.loading_charges.toFixed(2)}` : '—'}</td>
-                                                <td className="text-right" style={{ fontWeight: 600 }}>₹{(e.total_amount || 0).toFixed(2)}</td>
+                                                <td style={{ border: '1px solid #333', padding: '5px 8px', textAlign: 'center' }}>{i + 1}.</td>
+                                                <td style={{ border: '1px solid #333', padding: '5px 8px' }}>{e.date}</td>
+                                                <td style={{ border: '1px solid #333', padding: '5px 8px' }}>{e.from_location || '—'}</td>
+                                                <td style={{ border: '1px solid #333', padding: '5px 8px' }}>{e.to_location || '—'}</td>
+                                                <td style={{ border: '1px solid #333', padding: '5px 8px' }}>
+                                                    {e.entry_type === 'per_kg'
+                                                        ? (e.weight ? `${e.weight} Kg` : '—')
+                                                        : (e.no_of_bundles ? `${e.no_of_bundles} Bundles` : '—')}
+                                                </td>
+                                                <td style={{ border: '1px solid #333', padding: '5px 8px', textAlign: 'right' }}>
+                                                    {(e.total_amount || 0).toFixed(2)}/-
+                                                </td>
                                             </tr>
                                         ))}
+                                        {/* Total Amount Row */}
+                                        <tr>
+                                            <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                            <td colSpan={4} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1rem' }}>
+                                                Total Amount
+                                            </td>
+                                            <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1rem' }}>
+                                                {(viewInvoice.final_amount || 0).toFixed(2)}/-
+                                            </td>
+                                        </tr>
                                     </tbody>
                                 </table>
 
-                                <div className="inv-total">
-                                    <div className="label">Total Amount</div>
-                                    <div className="amount">₹{(viewInvoice.final_amount || 0).toFixed(2)}</div>
-                                </div>
-
-                                <div className="inv-footer">
-                                    <div>{viewInvoice.owner_name && `Authorized: ${viewInvoice.owner_name}`}</div>
-                                    <div>{viewInvoice.pan_id && `PAN: ${viewInvoice.pan_id}`}</div>
+                                {/* Footer: PAN + Owner */}
+                                <div className="inv-footer" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+                                    <div style={{ fontWeight: 600 }}>{viewInvoice.pan_id && `PAN NO. :- ${viewInvoice.pan_id}`}</div>
+                                    <div style={{ fontWeight: 600 }}>{viewInvoice.owner_name || ''}</div>
                                 </div>
                             </div>
                         </div>
