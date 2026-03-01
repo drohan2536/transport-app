@@ -1,0 +1,8 @@
+node_modules/
+dist/
+*.log
+server.log
+server_output.log
+install_log.txt
+migration_result.txt
+uploads/
