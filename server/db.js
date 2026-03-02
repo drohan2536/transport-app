@@ -24,6 +24,7 @@ db.exec(`
     owner_name TEXT DEFAULT '',
     pan_id TEXT NOT NULL,
     udyam_certificate_path TEXT DEFAULT '',
+    abbreviation TEXT DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -122,7 +123,8 @@ try {
 const migrations = [
   "ALTER TABLE companies ADD COLUMN owner_name TEXT DEFAULT ''",
   "ALTER TABLE companies ADD COLUMN pan_id TEXT DEFAULT ''",
-  "ALTER TABLE companies ADD COLUMN udyam_certificate_path TEXT DEFAULT ''"
+  "ALTER TABLE companies ADD COLUMN udyam_certificate_path TEXT DEFAULT ''",
+  "ALTER TABLE companies ADD COLUMN abbreviation TEXT DEFAULT ''"
 ];
 
 migrations.forEach(sql => {

@@ -31,25 +31,25 @@ router.get('/:id', (req, res) => {
 
 // POST create company
 router.post('/', (req, res) => {
-    const { name, address, email, phone, owner_name, pan_id } = req.body;
+    const { name, address, email, phone, owner_name, pan_id, abbreviation } = req.body;
     if (!name || !email || !pan_id) {
         return res.status(400).json({ error: 'Company Name, Email, and PAN ID are required' });
     }
     const result = db.prepare(
-        'INSERT INTO companies (name, address, email, phone, owner_name, pan_id) VALUES (?, ?, ?, ?, ?, ?)'
-    ).run(name, address || '', email, phone || '', owner_name || '', pan_id);
+        'INSERT INTO companies (name, address, email, phone, owner_name, pan_id, abbreviation) VALUES (?, ?, ?, ?, ?, ?, ?)'
+    ).run(name, address || '', email, phone || '', owner_name || '', pan_id, abbreviation || '');
     res.status(201).json({ id: result.lastInsertRowid, ...req.body });
 });
 
 // PUT update company
 router.put('/:id', (req, res) => {
-    const { name, address, email, phone, owner_name, pan_id } = req.body;
+    const { name, address, email, phone, owner_name, pan_id, abbreviation } = req.body;
     if (!name || !email || !pan_id) {
         return res.status(400).json({ error: 'Company Name, Email, and PAN ID are required' });
     }
     db.prepare(
-        'UPDATE companies SET name=?, address=?, email=?, phone=?, owner_name=?, pan_id=? WHERE id=?'
-    ).run(name, address || '', email, phone || '', owner_name || '', pan_id, req.params.id);
+        'UPDATE companies SET name=?, address=?, email=?, phone=?, owner_name=?, pan_id=?, abbreviation=? WHERE id=?'
+    ).run(name, address || '', email, phone || '', owner_name || '', pan_id, abbreviation || '', req.params.id);
     res.json({ id: Number(req.params.id), ...req.body });
 });
 

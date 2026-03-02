@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
 
-const emptyCompany = { name: '', address: '', email: '', phone: '', owner_name: '', pan_id: '' };
+const emptyCompany = { name: '', abbreviation: '', address: '', email: '', phone: '', owner_name: '', pan_id: '' };
 
 export default function Companies() {
     const showToast = useToast();
@@ -28,7 +28,7 @@ export default function Companies() {
     useEffect(() => { load(); }, []);
 
     const openAdd = () => { setEditing(null); setForm({ ...emptyCompany }); setShowModal(true); };
-    const openEdit = (c) => { setEditing(c); setForm({ name: c.name, address: c.address, email: c.email, phone: c.phone, owner_name: c.owner_name, pan_id: c.pan_id }); setShowModal(true); };
+    const openEdit = (c) => { setEditing(c); setForm({ name: c.name, abbreviation: c.abbreviation, address: c.address, email: c.email, phone: c.phone, owner_name: c.owner_name, pan_id: c.pan_id }); setShowModal(true); };
 
     const handleSave = async (e) => {
         e.preventDefault();
@@ -132,6 +132,7 @@ export default function Companies() {
                         <thead>
                             <tr>
                                 <th>Company Name</th>
+                                <th>Abbr</th>
                                 <th>Email</th>
                                 <th>Phone</th>
                                 <th>Owner</th>
@@ -144,6 +145,7 @@ export default function Companies() {
                             {companies.map(c => (
                                 <tr key={c.id}>
                                     <td style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{c.name}</td>
+                                    <td><span className="badge badge-info">{c.abbreviation || '—'}</span></td>
                                     <td>{c.email}</td>
                                     <td>{c.phone || '—'}</td>
                                     <td>{c.owner_name || '—'}</td>
@@ -176,9 +178,15 @@ export default function Companies() {
                         </div>
                         <form onSubmit={handleSave}>
                             <div className="modal-body">
-                                <div className="form-group">
-                                    <label className="form-label required">Company Name</label>
-                                    <input className="form-input" value={form.name} onChange={e => updateField('name', e.target.value)} placeholder="e.g. Krishna Govinda Transport Services" required />
+                                <div className="form-row">
+                                    <div className="form-group" style={{ flex: 2 }}>
+                                        <label className="form-label required">Company Name</label>
+                                        <input className="form-input" value={form.name} onChange={e => updateField('name', e.target.value)} placeholder="e.g. Krishna Govinda Transport Services" required />
+                                    </div>
+                                    <div className="form-group" style={{ flex: 1 }}>
+                                        <label className="form-label">Abbreviation</label>
+                                        <input className="form-input" value={form.abbreviation} onChange={e => updateField('abbreviation', e.target.value)} placeholder="e.g. KGTS" />
+                                    </div>
                                 </div>
                                 <div className="form-row">
                                     <div className="form-group">

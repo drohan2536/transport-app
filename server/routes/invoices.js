@@ -4,23 +4,29 @@ import db from '../db.js';
 
 const router = Router();
 
-// Generate invoice number: FY-XXX
-function generateInvoiceNumber() {
+// Generate invoice number: ABBR/FY-XXX (e.g. KGTS/25-26-001)
+function generateInvoiceNumber(abbreviation) {
+    const prefix = abbreviation ? `${abbreviation.toUpperCase()}/` : '';
     const now = new Date();
     const month = now.getMonth(); // 0-indexed
     const year = month >= 3 ? now.getFullYear() : now.getFullYear() - 1;
     const fy = `${String(year % 100).padStart(2, '0')}-${String((year + 1) % 100).padStart(2, '0')}`;
 
+    const searchPattern = `${prefix}${fy}-%`;
+
     const last = db.prepare(
-        "SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY invoice_number DESC LIMIT 1"
-    ).get(`${fy}-%`);
+        "SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1"
+    ).get(searchPattern);
 
     let seq = 1;
     if (last) {
         const parts = last.invoice_number.split('-');
-        seq = parseInt(parts[2], 10) + 1;
+        // Example: KGTS/25-26-001
+        // Parts: ['KGTS/25', '26', '001']
+        const lastPart = parts[parts.length - 1];
+        seq = parseInt(lastPart, 10) + 1;
     }
-    return `${fy}-${String(seq).padStart(3, '0')}`;
+    return `${prefix}${fy}-${String(seq).padStart(3, '0')}`;
 }
 
 // GET all invoices
@@ -72,8 +78,10 @@ router.post('/', (req, res) => {
     const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(client_id);
     if (!client) return res.status(404).json({ error: 'Client not found' });
 
+    const company = db.prepare('SELECT abbreviation FROM companies WHERE id = ?').get(client.company_id);
+
     const txn = db.transaction(() => {
-        const invoiceNumber = generateInvoiceNumber();
+        const invoiceNumber = generateInvoiceNumber(company?.abbreviation);
 
         // Calculate total
         const entries = db.prepare(
