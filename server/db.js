@@ -107,7 +107,40 @@ db.exec(`
     password TEXT DEFAULT ''
   );
 
+  CREATE TABLE IF NOT EXISTS app_settings (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    scheduler_interval_minutes INTEGER DEFAULT 60
+  );
+
+  CREATE TABLE IF NOT EXISTS vehicles (
+    id                INTEGER PRIMARY KEY AUTOINCREMENT,
+    vehicle_number    TEXT NOT NULL UNIQUE,
+    chassis_number    TEXT DEFAULT '',
+    engine_number     TEXT DEFAULT '',
+    model             TEXT DEFAULT '',
+    registration_date TEXT DEFAULT '',
+    owner_name        TEXT DEFAULT '',
+    owner_address     TEXT DEFAULT '',
+    owner_email       TEXT DEFAULT '',
+    created_at        DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS vehicle_documents (
+    id             INTEGER PRIMARY KEY AUTOINCREMENT,
+    vehicle_number TEXT NOT NULL,
+    doc_name       TEXT NOT NULL,
+    file_path      TEXT NOT NULL,
+    file_name      TEXT NOT NULL,
+    start_date     TEXT NOT NULL,
+    expiry_date    TEXT NOT NULL,
+    owner_name     TEXT DEFAULT '',
+    owner_email    TEXT DEFAULT '',
+    reminder_sent  INTEGER DEFAULT 0,
+    created_at     DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
   INSERT OR IGNORE INTO smtp_config (id) VALUES (1);
+  INSERT OR IGNORE INTO app_settings (id) VALUES (1);
 `);
 
 // Migration: Add invoice_visible_columns if missing
@@ -124,7 +157,10 @@ const migrations = [
   "ALTER TABLE companies ADD COLUMN owner_name TEXT DEFAULT ''",
   "ALTER TABLE companies ADD COLUMN pan_id TEXT DEFAULT ''",
   "ALTER TABLE companies ADD COLUMN udyam_certificate_path TEXT DEFAULT ''",
-  "ALTER TABLE companies ADD COLUMN abbreviation TEXT DEFAULT ''"
+  "ALTER TABLE companies ADD COLUMN abbreviation TEXT DEFAULT ''",
+  "ALTER TABLE vehicle_documents ADD COLUMN owner_name TEXT DEFAULT ''",
+  "ALTER TABLE vehicle_documents ADD COLUMN owner_email TEXT DEFAULT ''",
+  "ALTER TABLE vehicle_documents ADD COLUMN reminder_sent INTEGER DEFAULT 0"
 ];
 
 migrations.forEach(sql => {

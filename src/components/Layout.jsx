@@ -38,6 +38,9 @@ export default function Layout() {
                         <NavLink to="/entries" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                             <span className="nav-icon">📋</span> Daily Entries
                         </NavLink>
+                        <NavLink to="/vehicle-docs" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                            <span className="nav-icon">🚗</span> Vehicle Documents
+                        </NavLink>
 
                         <div className="sidebar-section">Invoicing</div>
                         <NavLink to="/invoicing" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
@@ -48,8 +51,8 @@ export default function Layout() {
                         </NavLink>
 
                         <div className="sidebar-section">Settings</div>
-                        <NavLink to="/smtp" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                            <span className="nav-icon">✉️</span> Email Settings
+                        <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                            <span className="nav-icon">⚙️</span> Settings
                         </NavLink>
                     </nav>
                 </aside>

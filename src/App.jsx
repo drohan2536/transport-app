@@ -6,7 +6,8 @@ import Clients from './pages/Clients.jsx';
 import Entries from './pages/Entries.jsx';
 import Invoicing from './pages/Invoicing.jsx';
 import Dashboard from './pages/Dashboard.jsx';
-import SmtpSettings from './pages/SmtpSettings.jsx';
+import Settings from './pages/Settings.jsx';
+import VehicleDocuments from './pages/VehicleDocuments.jsx';
 
 export default function App() {
     return (
@@ -19,7 +20,9 @@ export default function App() {
                     <Route path="/entries" element={<Entries />} />
                     <Route path="/invoicing" element={<Invoicing />} />
                     <Route path="/dashboard" element={<Dashboard />} />
-                    <Route path="/smtp" element={<SmtpSettings />} />
+                    <Route path="/settings" element={<Settings />} />
+                    <Route path="/smtp" element={<Settings />} />
+                    <Route path="/vehicle-docs" element={<VehicleDocuments />} />
                 </Route>
             </Routes>
         </BrowserRouter>

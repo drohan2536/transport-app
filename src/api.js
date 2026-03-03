@@ -69,4 +69,8 @@ export const api = {
     // SMTP
     getSmtp: () => request('/smtp'),
     updateSmtp: (data) => request('/smtp', { method: 'PUT', body: JSON.stringify(data) }),
+
+    // Settings
+    getSettings: () => request('/settings'),
+    updateSettings: (data) => request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
 };

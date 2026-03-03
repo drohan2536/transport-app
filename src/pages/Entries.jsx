@@ -36,6 +36,15 @@ export default function Entries() {
     const [loading, setLoading] = useState(false);
     const [showModal, setShowModal] = useState(false);
 
+    // Track which auto-calculated fields have been manually overridden
+    const [overrides, setOverrides] = useState({
+        subWeights: {},  // { [index]: true } — individual sub-entry weights
+        totalWeight: false,
+        totalBundles: false,
+        amount: false,
+        totalAmount: false,
+    });
+
     // Dashboard Filters
     const [filters, setFilters] = useState({
         client_id: '',
@@ -89,12 +98,13 @@ export default function Entries() {
         });
     }, []);
 
-    // Auto-calculate weight for each per_kg sub-entry
+    // Auto-calculate weight for each per_kg sub-entry (skip if user overrode)
     useEffect(() => {
         if (form.entry_type !== 'per_kg') return;
         setSubEntries(prev => {
             let changed = false;
-            const updated = prev.map(se => {
+            const updated = prev.map((se, idx) => {
+                if (overrides.subWeights[idx]) return se; // user overrode this weight
                 const l = parseFloat(se.length);
                 const w = parseFloat(se.width);
                 const g = parseFloat(se.gsm);
@@ -112,23 +122,26 @@ export default function Entries() {
             });
             return changed ? updated : prev;
         });
-    }, [subEntries.map(s => `${s.length}|${s.width}|${s.gsm}|${s.packaging}|${s.no_of_packets}|${s.unit}`).join(','), form.entry_type]);
+    }, [subEntries.map(s => `${s.length}|${s.width}|${s.gsm}|${s.packaging}|${s.no_of_packets}|${s.unit}`).join(','), form.entry_type, overrides.subWeights]);
 
-    // Sum sub-entry weights/bundles into the main form
+    // Sum sub-entry weights/bundles into the main form (skip if user overrode)
     useEffect(() => {
         if (form.entry_type === 'per_kg') {
+            if (overrides.totalWeight) return;
             const totalWeight = subEntries.reduce((sum, se) => sum + (parseFloat(se.weight) || 0), 0);
             const rounded = (Math.round(totalWeight * 100) / 100).toString();
             setForm(prev => prev.weight !== rounded ? { ...prev, weight: rounded } : prev);
         } else {
+            if (overrides.totalBundles) return;
             const totalBundles = subEntries.reduce((sum, se) => sum + (parseInt(se.no_of_bundles) || 0), 0);
             const str = totalBundles.toString();
             setForm(prev => prev.no_of_bundles !== str ? { ...prev, no_of_bundles: str } : prev);
         }
-    }, [subEntries, form.entry_type]);
+    }, [subEntries, form.entry_type, overrides.totalWeight, overrides.totalBundles]);
 
-    // Amount calculation
+    // Amount calculation (skip if user overrode)
     useEffect(() => {
+        if (overrides.amount) return;
         let amount = 0;
         if (form.entry_type === 'per_kg') {
             const w = parseFloat(form.weight) || 0;
@@ -140,19 +153,23 @@ export default function Entries() {
             amount = b * r;
         }
         setForm(prev => ({ ...prev, amount: (Math.round(amount * 100) / 100).toString() }));
-    }, [form.weight, form.rate_per_kg, form.no_of_bundles, form.rate_per_bundle, form.entry_type]);
+    }, [form.weight, form.rate_per_kg, form.no_of_bundles, form.rate_per_bundle, form.entry_type, overrides.amount]);
 
     useEffect(() => {
+        if (overrides.totalAmount) return;
         const amt = parseFloat(form.amount) || 0;
         const lc = form.has_loading_charges ? (parseFloat(form.loading_charges) || 0) : 0;
         setForm(prev => ({ ...prev, total_amount: (Math.round((amt + lc) * 100) / 100).toString() }));
-    }, [form.amount, form.loading_charges, form.has_loading_charges]);
+    }, [form.amount, form.loading_charges, form.has_loading_charges, overrides.totalAmount]);
 
+
+    const resetOverrides = () => setOverrides({ subWeights: {}, totalWeight: false, totalBundles: false, amount: false, totalAmount: false });
 
     const openAdd = () => {
         setEditing(null);
         setForm({ ...emptyEntry, client_id: filters.client_id || '' });
         setSubEntries([{ ...emptySubEntryKg }]);
+        resetOverrides();
         setShowModal(true);
     };
 
@@ -200,6 +217,7 @@ export default function Entries() {
                 no_of_bundles: entry.no_of_bundles ? entry.no_of_bundles.toString() : ''
             }]);
         }
+        resetOverrides();
         setShowModal(true);
     };
 
@@ -468,8 +486,8 @@ export default function Entries() {
                                                         <input className="form-input" type="number" value={se.no_of_packets} onChange={e => updateSubEntry(idx, 'no_of_packets', e.target.value)} placeholder="0" />
                                                     </div>
                                                     <div className="form-group">
-                                                        <label className="form-label text-accent">Weight (Auto)</label>
-                                                        <input className="form-input" type="number" step="any" value={se.weight} readOnly style={{ borderColor: 'var(--accent-primary)', opacity: 0.85 }} />
+                                                        <label className="form-label text-accent">Weight {overrides.subWeights[idx] ? '(Manual)' : '(Auto)'}</label>
+                                                        <input className="form-input" type="number" step="any" value={se.weight} onChange={e => { updateSubEntry(idx, 'weight', e.target.value); setOverrides(p => ({ ...p, subWeights: { ...p.subWeights, [idx]: true } })); }} style={{ borderColor: overrides.subWeights[idx] ? 'var(--warning)' : 'var(--accent-primary)' }} />
                                                     </div>
                                                 </div>
                                             </div>
@@ -477,8 +495,8 @@ export default function Entries() {
                                         {/* Final Weight + Rate */}
                                         <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
                                             <div className="form-group">
-                                                <label className="form-label" style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '0.95rem' }}>⚖️ Final Weight (Total)</label>
-                                                <input className="form-input" type="number" step="any" value={form.weight} readOnly style={{ borderColor: 'var(--accent-primary)', fontWeight: 700, fontSize: '1.1rem', background: 'var(--bg-tertiary, rgba(255,255,255,0.05))' }} />
+                                                <label className="form-label" style={{ color: overrides.totalWeight ? 'var(--warning)' : 'var(--accent-primary)', fontWeight: 700, fontSize: '0.95rem' }}>⚖️ Final Weight {overrides.totalWeight ? '(Manual)' : '(Total)'}</label>
+                                                <input className="form-input" type="number" step="any" value={form.weight} onChange={e => { updateField('weight', e.target.value); setOverrides(p => ({ ...p, totalWeight: true })); }} style={{ borderColor: overrides.totalWeight ? 'var(--warning)' : 'var(--accent-primary)', fontWeight: 700, fontSize: '1.1rem', background: 'var(--bg-tertiary, rgba(255,255,255,0.05))' }} />
                                             </div>
                                             <div className="form-group">
                                                 <label className="form-label">Rate per Kg (₹)</label>
@@ -507,8 +525,8 @@ export default function Entries() {
                                         {/* Final Quantity + Rate */}
                                         <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
                                             <div className="form-group">
-                                                <label className="form-label" style={{ color: 'var(--accent-primary)', fontWeight: 700, fontSize: '0.95rem' }}>📦 Final Quantity (Total Bundles)</label>
-                                                <input className="form-input" type="number" value={form.no_of_bundles} readOnly style={{ borderColor: 'var(--accent-primary)', fontWeight: 700, fontSize: '1.1rem', background: 'var(--bg-tertiary, rgba(255,255,255,0.05))' }} />
+                                                <label className="form-label" style={{ color: overrides.totalBundles ? 'var(--warning)' : 'var(--accent-primary)', fontWeight: 700, fontSize: '0.95rem' }}>📦 Final Quantity {overrides.totalBundles ? '(Manual)' : '(Total Bundles)'}</label>
+                                                <input className="form-input" type="number" value={form.no_of_bundles} onChange={e => { updateField('no_of_bundles', e.target.value); setOverrides(p => ({ ...p, totalBundles: true })); }} style={{ borderColor: overrides.totalBundles ? 'var(--warning)' : 'var(--accent-primary)', fontWeight: 700, fontSize: '1.1rem', background: 'var(--bg-tertiary, rgba(255,255,255,0.05))' }} />
                                             </div>
                                             <div className="form-group">
                                                 <label className="form-label">Rate per Bundle (₹)</label>
@@ -530,12 +548,12 @@ export default function Entries() {
                                         )}
                                     </div>
                                     <div className="form-group">
-                                        <label className="form-label text-accent">Amount (Auto)</label>
-                                        <input className="form-input" type="number" step="any" value={form.amount} onChange={e => updateField('amount', e.target.value)} style={{ borderColor: 'var(--accent-primary)' }} />
+                                        <label className="form-label" style={{ color: overrides.amount ? 'var(--warning)' : 'var(--accent-primary)' }}>Amount {overrides.amount ? '(Manual)' : '(Auto)'}</label>
+                                        <input className="form-input" type="number" step="any" value={form.amount} onChange={e => { updateField('amount', e.target.value); setOverrides(p => ({ ...p, amount: true })); }} style={{ borderColor: overrides.amount ? 'var(--warning)' : 'var(--accent-primary)' }} />
                                     </div>
                                     <div className="form-group">
-                                        <label className="form-label text-accent" style={{ color: 'var(--accent-primary)' }}>Total Amount (Auto)</label>
-                                        <input className="form-input" type="number" step="any" value={form.total_amount} onChange={e => updateField('total_amount', e.target.value)} style={{ borderColor: 'var(--accent-primary)', fontWeight: 700 }} />
+                                        <label className="form-label" style={{ color: overrides.totalAmount ? 'var(--warning)' : 'var(--accent-primary)' }}>Total Amount {overrides.totalAmount ? '(Manual)' : '(Auto)'}</label>
+                                        <input className="form-input" type="number" step="any" value={form.total_amount} onChange={e => { updateField('total_amount', e.target.value); setOverrides(p => ({ ...p, totalAmount: true })); }} style={{ borderColor: overrides.totalAmount ? 'var(--warning)' : 'var(--accent-primary)', fontWeight: 700 }} />
                                     </div>
                                 </div>
                             </div>
