@@ -205,8 +205,9 @@ router.post('/:id/email', async (req, res) => {
         const transporter = nodemailer.createTransport({
             host: smtp.host,
             port: smtp.port,
-            secure: smtp.secure === 1,
-            auth: { user: smtp.username, pass: smtp.password }
+            secure: smtp.port === 465,
+            auth: { user: smtp.username, pass: smtp.password },
+            tls: { rejectUnauthorized: false }
         });
 
         const { pdfBase64 } = req.body;

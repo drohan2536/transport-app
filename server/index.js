@@ -9,6 +9,10 @@ import clientsRouter from './routes/clients.js';
 import entriesRouter from './routes/entries.js';
 import invoicesRouter from './routes/invoices.js';
 import smtpRouter from './routes/smtp.js';
+import vehicleDocsRouter from './routes/vehicleDocs.js';
+import vehiclesRouter from './routes/vehicles.js';
+import settingsRouter from './routes/settings.js';
+import { startExpiryScheduler } from './scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, 'uploads');
@@ -26,6 +30,9 @@ app.use('/api/clients', clientsRouter);
 app.use('/api/entries', entriesRouter);
 app.use('/api/invoices', invoicesRouter);
 app.use('/api/smtp', smtpRouter);
+app.use('/api/vehicle-docs', vehicleDocsRouter);
+app.use('/api/vehicles', vehiclesRouter);
+app.use('/api/settings', settingsRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -37,4 +44,5 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
+    startExpiryScheduler();
 });

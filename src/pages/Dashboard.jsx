@@ -70,11 +70,9 @@ export default function Dashboard() {
 
             const logoBase64 = await loadLogoBase64();
 
-            // Generate PDF as base64
-            const vfsObj = pdfFonts.default?.pdfMake?.vfs || pdfFonts.pdfMake?.vfs || pdfFonts.vfs;
-            const { fonts, vfs } = setupPdfFonts(vfsObj);
+            // Generate PDF as base64 using already-initialized pdfMake
             const docDef = buildPdfDefinition(full, logoBase64);
-            pdfMake.createPdf(docDef, null, fonts, vfs).getBase64(async (base64) => {
+            pdfMake.createPdf(docDef).getBase64(async (base64) => {
                 try {
                     await api.emailInvoice(inv.id, base64);
                     showToast(`Invoice emailed to ${full.client_email} ✉️`);
