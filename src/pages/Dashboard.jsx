@@ -270,15 +270,45 @@ export default function Dashboard() {
                                             </tr>
                                         ))}
                                         {/* Total Amount Row */}
-                                        <tr>
-                                            <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
-                                            <td colSpan={4} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1rem' }}>
-                                                Total Amount
-                                            </td>
-                                            <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1rem' }}>
-                                                {(viewInvoice.final_amount || 0).toFixed(2)}/-
-                                            </td>
-                                        </tr>
+                                        {(() => {
+                                            const entriesTotal = (viewInvoice.entries || []).reduce((sum, e) => sum + (e.total_amount || 0), 0);
+                                            const hasAdj = viewInvoice.adjustment_type && viewInvoice.adjustment_amount > 0;
+                                            return (
+                                                <>
+                                                    <tr>
+                                                        <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                                        <td colSpan={4} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1rem' }}>
+                                                            Total Amount
+                                                        </td>
+                                                        <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1rem' }}>
+                                                            {hasAdj ? entriesTotal.toFixed(2) : (viewInvoice.final_amount || 0).toFixed(2)}/-
+                                                        </td>
+                                                    </tr>
+                                                    {hasAdj && (
+                                                        <>
+                                                            <tr>
+                                                                <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                                                <td colSpan={4} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 600, fontSize: '0.95rem', color: viewInvoice.adjustment_type === 'addition' ? '#16a34a' : '#dc2626' }}>
+                                                                    {viewInvoice.adjustment_type === 'addition' ? 'Adding' : 'Subtracting'} ({viewInvoice.adjustment_reason})
+                                                                </td>
+                                                                <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 600, fontSize: '0.95rem', color: viewInvoice.adjustment_type === 'addition' ? '#16a34a' : '#dc2626' }}>
+                                                                    {viewInvoice.adjustment_type === 'addition' ? '+' : '−'}{viewInvoice.adjustment_amount.toFixed(2)}/-
+                                                                </td>
+                                                            </tr>
+                                                            <tr>
+                                                                <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                                                <td colSpan={4} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1.05rem' }}>
+                                                                    Final Amount
+                                                                </td>
+                                                                <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1.05rem' }}>
+                                                                    {(viewInvoice.final_amount || 0).toFixed(2)}/-
+                                                                </td>
+                                                            </tr>
+                                                        </>
+                                                    )}
+                                                </>
+                                            );
+                                        })()}
                                     </tbody>
                                 </table>
 

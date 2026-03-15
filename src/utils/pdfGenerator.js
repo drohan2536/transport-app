@@ -143,37 +143,62 @@ export function buildPdfDefinition(invoice, logoBase64) {
         tableBody.push(row);
     });
 
+    // Calculate entries total (before adjustment)
+    const entriesTotal = entries.reduce((sum, e) => sum + (e.total_amount || 0), 0);
+    const hasAdjustment = invoice.adjustment_type && invoice.adjustment_amount > 0;
+
     // Total Amount row — spans all columns except the last one
     const totalColCount = 1 + visibleColIds.length; // Sr. no. + visible cols
-    const totalRow = [];
-    if (totalColCount > 2) {
-        totalRow.push({ text: '', border: [true, true, false, true] }); // Sr. no. cell empty
-        totalRow.push({
-            text: 'Total Amount',
-            bold: true,
-            fontSize: 10,
-            color: '#1e3a8a', // Dark blue
-            alignment: 'center',
-            colSpan: totalColCount - 2,
-            border: [false, true, true, true]
-        });
-        // Fill colSpan placeholders
-        for (let i = 0; i < totalColCount - 3; i++) {
-            totalRow.push({});
+    const buildSummaryRow = (label, amount, opts = {}) => {
+        const { color = '#1e3a8a', fontSize = 10, bold = true } = opts;
+        const row = [];
+        if (totalColCount > 2) {
+            row.push({ text: '', border: [true, true, false, true] }); // Sr. no. cell empty
+            row.push({
+                text: label,
+                bold,
+                fontSize,
+                color,
+                alignment: 'center',
+                colSpan: totalColCount - 2,
+                border: [false, true, true, true]
+            });
+            // Fill colSpan placeholders
+            for (let i = 0; i < totalColCount - 3; i++) {
+                row.push({});
+            }
+            row.push({
+                text: amount,
+                bold,
+                fontSize,
+                color,
+                alignment: 'right'
+            });
+        } else {
+            row.push({ text: label, bold, fontSize, color, alignment: 'center' });
+            row.push({ text: amount, bold, fontSize, color, alignment: 'right' });
         }
-        totalRow.push({
-            text: `${(invoice.final_amount || 0).toFixed(2)}/-`,
-            bold: true,
-            fontSize: 10,
-            color: '#1e3a8a', // Dark blue
-            alignment: 'right'
-        });
+        return row;
+    };
+
+    if (hasAdjustment) {
+        // Row 1: Total Amount (entries total before adjustment)
+        tableBody.push(buildSummaryRow('Total Amount', `${entriesTotal.toFixed(2)}/-`));
+
+        // Row 2: Adding/Subtracting (reason) with adjustment amount
+        const adjLabel = invoice.adjustment_type === 'addition'
+            ? `Adding (${invoice.adjustment_reason || ''})`
+            : `Subtracting (${invoice.adjustment_reason || ''})`;
+        const adjSign = invoice.adjustment_type === 'addition' ? '+' : '−';
+        const adjColor = invoice.adjustment_type === 'addition' ? '#16a34a' : '#dc2626';
+        tableBody.push(buildSummaryRow(adjLabel, `${adjSign}${invoice.adjustment_amount.toFixed(2)}/-`, { color: adjColor, fontSize: 9, bold: false }));
+
+        // Row 3: Final Amount
+        tableBody.push(buildSummaryRow('Final Amount', `${(invoice.final_amount || 0).toFixed(2)}/-`, { fontSize: 11 }));
     } else {
-        // Fallback for very few columns
-        totalRow.push({ text: 'Total Amount', bold: true, fontSize: 10, color: '#1e3a8a', alignment: 'center' });
-        totalRow.push({ text: `${(invoice.final_amount || 0).toFixed(2)}/-`, bold: true, fontSize: 10, color: '#1e3a8a', alignment: 'right' });
+        // No adjustment — single Total Amount row
+        tableBody.push(buildSummaryRow('Total Amount', `${(invoice.final_amount || 0).toFixed(2)}/-`));
     }
-    tableBody.push(totalRow);
 
     // --- Build content ---
     const content = [];
