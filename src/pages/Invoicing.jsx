@@ -16,6 +16,12 @@ export default function Invoicing() {
     const [invoiceData, setInvoiceData] = useState(null);
     const [loading, setLoading] = useState(false);
 
+    // Adjustment state
+    const [wantsAdjustment, setWantsAdjustment] = useState(false);
+    const [adjustmentType, setAdjustmentType] = useState('');
+    const [adjustmentAmount, setAdjustmentAmount] = useState('');
+    const [adjustmentReason, setAdjustmentReason] = useState('');
+
     useEffect(() => {
         api.getClients().then(setClients).catch(e => showToast(e.message, 'error'));
     }, []);
@@ -49,10 +55,31 @@ export default function Invoicing() {
 
     const client = clients.find(c => c.id === Number(clientId));
 
+    // Compute adjusted final amount
+    const adjAmountNum = parseFloat(adjustmentAmount) || 0;
+    const computedFinalAmount = wantsAdjustment && adjustmentType
+        ? (adjustmentType === 'addition' ? totalAmount + adjAmountNum : totalAmount - adjAmountNum)
+        : totalAmount;
+
     const previewInvoice = () => {
         if (selectedEntryIds.length === 0) {
             showToast('Please select at least one entry', 'error');
             return;
+        }
+        // Validate adjustment fields if adjustment is wanted
+        if (wantsAdjustment) {
+            if (!adjustmentType) {
+                showToast('Please select adjustment type (Addition or Subtraction)', 'error');
+                return;
+            }
+            if (!adjustmentAmount || adjAmountNum <= 0) {
+                showToast('Please enter a valid adjustment amount', 'error');
+                return;
+            }
+            if (!adjustmentReason.trim()) {
+                showToast('Please enter the reason for adjustment', 'error');
+                return;
+            }
         }
         // Build full invoice preview data
         setInvoiceData({
@@ -69,13 +96,22 @@ export default function Invoicing() {
 
     const finalizeInvoice = async () => {
         try {
-            const newInvoice = await api.createInvoice({
+            const invoicePayload = {
                 client_id: Number(clientId),
                 from_date: fromDate,
                 to_date: toDate,
                 invoice_date: invoiceDate,
                 entry_ids: selectedEntryIds,
-            });
+            };
+
+            // Include adjustment data if applicable
+            if (wantsAdjustment && adjustmentType) {
+                invoicePayload.adjustment_type = adjustmentType;
+                invoicePayload.adjustment_amount = adjAmountNum;
+                invoicePayload.adjustment_reason = adjustmentReason.trim();
+            }
+
+            const newInvoice = await api.createInvoice(invoicePayload);
             showToast('Invoice created successfully! 🎉');
 
             const docDef = buildPdfDefinition(newInvoice, logoBase64);
@@ -96,6 +132,11 @@ export default function Invoicing() {
             setShowPreview(false);
             setEntries([]);
             setSelectedEntryIds([]);
+            // Reset adjustment state
+            setWantsAdjustment(false);
+            setAdjustmentType('');
+            setAdjustmentAmount('');
+            setAdjustmentReason('');
         } catch (e) { showToast(e.message, 'error'); }
     };
 
@@ -145,7 +186,6 @@ export default function Invoicing() {
                                     <span style={{ fontSize: '0.9rem', color: 'var(--text-secondary)' }}>
                                         Selected: {selectedEntryIds.length} | Total: <strong style={{ color: 'var(--accent-primary-hover)' }}>₹{totalAmount.toFixed(2)}</strong>
                                     </span>
-                                    <button className="btn btn-primary" onClick={previewInvoice}>Preview Invoice →</button>
                                 </div>
                             </div>
                             <div className="table-container">
@@ -177,6 +217,50 @@ export default function Invoicing() {
                                         ))}
                                     </tbody>
                                 </table>
+                            </div>
+
+                            {/* Adjustment Section */}
+                            <div style={{ marginTop: 'var(--space-lg)', padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: wantsAdjustment ? 'var(--space-md)' : 0 }}>
+                                    <label style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Any adjustments required in the Final Amount?</label>
+                                    <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                        <button
+                                            className={`btn btn-sm ${wantsAdjustment ? 'btn-primary' : 'btn-ghost'}`}
+                                            onClick={() => setWantsAdjustment(true)}
+                                            type="button"
+                                        >Yes</button>
+                                        <button
+                                            className={`btn btn-sm ${!wantsAdjustment ? 'btn-primary' : 'btn-ghost'}`}
+                                            onClick={() => { setWantsAdjustment(false); setAdjustmentType(''); setAdjustmentAmount(''); setAdjustmentReason(''); }}
+                                            type="button"
+                                        >No</button>
+                                    </div>
+                                </div>
+                                {wantsAdjustment && (
+                                    <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 2fr' }}>
+                                        <div className="form-group">
+                                            <label className="form-label required">Adjustment Type</label>
+                                            <select className="form-select" value={adjustmentType} onChange={e => setAdjustmentType(e.target.value)}>
+                                                <option value="">Select…</option>
+                                                <option value="addition">Addition (+)</option>
+                                                <option value="subtraction">Subtraction (−)</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label required">Adjusting Amount (₹)</label>
+                                            <input className="form-input" type="number" min="0" step="0.01" placeholder="Enter amount" value={adjustmentAmount} onChange={e => setAdjustmentAmount(e.target.value)} />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label required">Reason</label>
+                                            <input className="form-input" type="text" placeholder="e.g. Discount, Extra charges, etc." value={adjustmentReason} onChange={e => setAdjustmentReason(e.target.value)} />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Preview Button */}
+                            <div style={{ marginTop: 'var(--space-md)', textAlign: 'right' }}>
+                                <button className="btn btn-primary" onClick={previewInvoice}>Preview Invoice →</button>
                             </div>
                         </div>
                     )}
@@ -290,15 +374,39 @@ export default function Invoicing() {
                                     const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
                                     const cols = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'weight', 'amount'];
                                     return (
-                                        <tr>
-                                            <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
-                                            <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1rem' }}>
-                                                Total Amount
-                                            </td>
-                                            <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1rem' }}>
-                                                {totalAmount.toFixed(2)}/-
-                                            </td>
-                                        </tr>
+                                        <>
+                                            <tr>
+                                                <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                                <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1rem' }}>
+                                                    Total Amount
+                                                </td>
+                                                <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1rem' }}>
+                                                    {totalAmount.toFixed(2)}/-
+                                                </td>
+                                            </tr>
+                                            {wantsAdjustment && adjustmentType && adjAmountNum > 0 && (
+                                                <>
+                                                    <tr>
+                                                        <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                                        <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 600, fontSize: '0.95rem', color: adjustmentType === 'addition' ? 'var(--success, #16a34a)' : 'var(--error, #dc2626)' }}>
+                                                            {adjustmentType === 'addition' ? 'Adding' : 'Subtracting'} ({adjustmentReason})
+                                                        </td>
+                                                        <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 600, fontSize: '0.95rem', color: adjustmentType === 'addition' ? 'var(--success, #16a34a)' : 'var(--error, #dc2626)' }}>
+                                                            {adjustmentType === 'addition' ? '+' : '−'}{adjAmountNum.toFixed(2)}/-
+                                                        </td>
+                                                    </tr>
+                                                    <tr>
+                                                        <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                                        <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1.05rem' }}>
+                                                            Final Amount
+                                                        </td>
+                                                        <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1.05rem' }}>
+                                                            {computedFinalAmount.toFixed(2)}/-
+                                                        </td>
+                                                    </tr>
+                                                </>
+                                            )}
+                                        </>
                                     );
                                 })()}
                             </tbody>

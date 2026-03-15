@@ -12,6 +12,8 @@ import smtpRouter from './routes/smtp.js';
 import vehicleDocsRouter from './routes/vehicleDocs.js';
 import vehiclesRouter from './routes/vehicles.js';
 import settingsRouter from './routes/settings.js';
+import outstandingRouter from './routes/outstanding.js';
+import workersRouter from './routes/workers.js';
 import { startExpiryScheduler } from './scheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -33,6 +35,8 @@ app.use('/api/smtp', smtpRouter);
 app.use('/api/vehicle-docs', vehicleDocsRouter);
 app.use('/api/vehicles', vehiclesRouter);
 app.use('/api/settings', settingsRouter);
+app.use('/api/outstanding', outstandingRouter);
+app.use('/api/workers', workersRouter);
 
 // Error handling middleware
 app.use((err, req, res, next) => {

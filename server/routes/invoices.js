@@ -7,6 +7,40 @@ const router = Router();
 // Generate invoice number: ABBR/FY-XXX (e.g. KGTS/25-26-001)
 function generateInvoiceNumber(abbreviation) {
     const prefix = abbreviation ? `${abbreviation.toUpperCase()}/` : '';
+    const abbr = abbreviation ? abbreviation.toUpperCase() : '';
+
+    // Check for override (reset) FIRST — if one exists, use its FY + seq directly
+    const override = db.prepare(
+        "SELECT id, fy_pattern, next_seq FROM invoice_seq_overrides WHERE abbreviation = ? ORDER BY id DESC LIMIT 1"
+    ).get(abbr);
+
+    if (override) {
+        // Use the override's FY and seq, then delete it
+        const overrideFy = override.fy_pattern;
+        let seq = override.next_seq;
+
+        // But also check if there are already invoices with higher numbers in the same FY
+        const overridePattern = `${prefix}${overrideFy}-%`;
+        const last = db.prepare(
+            "SELECT invoice_number FROM invoices WHERE invoice_number LIKE ? ORDER BY id DESC LIMIT 1"
+        ).get(overridePattern);
+
+        if (last) {
+            const parts = last.invoice_number.split('-');
+            const lastPart = parts[parts.length - 1];
+            const existingSeq = parseInt(lastPart, 10) + 1;
+            if (existingSeq > seq) {
+                seq = existingSeq;
+            }
+        }
+
+        // Consume the override
+        db.prepare("DELETE FROM invoice_seq_overrides WHERE id = ?").run(override.id);
+
+        return `${prefix}${overrideFy}-${String(seq).padStart(3, '0')}`;
+    }
+
+    // No override — use standard auto-computation
     const now = new Date();
     const month = now.getMonth(); // 0-indexed
     const year = month >= 3 ? now.getFullYear() : now.getFullYear() - 1;
@@ -21,11 +55,10 @@ function generateInvoiceNumber(abbreviation) {
     let seq = 1;
     if (last) {
         const parts = last.invoice_number.split('-');
-        // Example: KGTS/25-26-001
-        // Parts: ['KGTS/25', '26', '001']
         const lastPart = parts[parts.length - 1];
         seq = parseInt(lastPart, 10) + 1;
     }
+
     return `${prefix}${fy}-${String(seq).padStart(3, '0')}`;
 }
 
@@ -70,9 +103,22 @@ router.get('/:id', (req, res, next) => {
 
 // POST create invoice
 router.post('/', (req, res) => {
-    const { client_id, from_date, to_date, invoice_date, entry_ids } = req.body;
+    const { client_id, from_date, to_date, invoice_date, entry_ids, adjustment_type, adjustment_amount, adjustment_reason } = req.body;
     if (!client_id || !from_date || !to_date || !entry_ids || entry_ids.length === 0) {
         return res.status(400).json({ error: 'Client, date range, and entries are required' });
+    }
+
+    // Validate adjustment fields: if any adjustment field is provided, all must be provided
+    if (adjustment_type) {
+        if (!['addition', 'subtraction'].includes(adjustment_type)) {
+            return res.status(400).json({ error: 'Adjustment type must be "addition" or "subtraction"' });
+        }
+        if (!adjustment_amount || adjustment_amount <= 0) {
+            return res.status(400).json({ error: 'Adjustment amount is required and must be greater than 0' });
+        }
+        if (!adjustment_reason || adjustment_reason.trim() === '') {
+            return res.status(400).json({ error: 'Adjustment reason is required' });
+        }
     }
 
     const client = db.prepare('SELECT * FROM clients WHERE id = ?').get(client_id);
@@ -83,7 +129,7 @@ router.post('/', (req, res) => {
     const txn = db.transaction(() => {
         const invoiceNumber = generateInvoiceNumber(company?.abbreviation);
 
-        // Calculate total
+        // Calculate total from entries
         const entries = db.prepare(
             `SELECT * FROM entries WHERE id IN (${entry_ids.map(() => '?').join(',')}) AND invoice_id IS NULL`
         ).all(...entry_ids);
@@ -92,12 +138,21 @@ router.post('/', (req, res) => {
             throw new Error('No valid uninvoiced entries found');
         }
 
-        const finalAmount = entries.reduce((sum, e) => sum + (e.total_amount || 0), 0);
+        const entriesTotal = entries.reduce((sum, e) => sum + (e.total_amount || 0), 0);
+
+        // Apply adjustment
+        let finalAmount = entriesTotal;
+        const adjAmount = parseFloat(adjustment_amount) || 0;
+        if (adjustment_type === 'addition') {
+            finalAmount = entriesTotal + adjAmount;
+        } else if (adjustment_type === 'subtraction') {
+            finalAmount = entriesTotal - adjAmount;
+        }
 
         const result = db.prepare(`
-      INSERT INTO invoices (invoice_number, client_id, company_id, invoice_date, from_date, to_date, final_amount)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
-    `).run(invoiceNumber, client_id, client.company_id, invoice_date || new Date().toISOString().split('T')[0], from_date, to_date, finalAmount);
+      INSERT INTO invoices (invoice_number, client_id, company_id, invoice_date, from_date, to_date, final_amount, adjustment_type, adjustment_amount, adjustment_reason)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(invoiceNumber, client_id, client.company_id, invoice_date || new Date().toISOString().split('T')[0], from_date, to_date, finalAmount, adjustment_type || '', adjAmount, adjustment_reason || '');
 
         // Link entries to invoice
         const update = db.prepare('UPDATE entries SET invoice_id = ? WHERE id = ?');
@@ -129,7 +184,7 @@ router.post('/', (req, res) => {
 
 // PUT update invoice
 router.put('/:id', (req, res) => {
-    const { invoice_date, entry_ids } = req.body;
+    const { invoice_date, entry_ids, adjustment_type, adjustment_amount, adjustment_reason } = req.body;
 
     const txn = db.transaction(() => {
         // Unlink old entries
@@ -140,10 +195,19 @@ router.put('/:id', (req, res) => {
                 `SELECT * FROM entries WHERE id IN (${entry_ids.map(() => '?').join(',')})`
             ).all(...entry_ids);
 
-            const finalAmount = entries.reduce((sum, e) => sum + (e.total_amount || 0), 0);
+            const entriesTotal = entries.reduce((sum, e) => sum + (e.total_amount || 0), 0);
 
-            db.prepare('UPDATE invoices SET invoice_date=?, final_amount=? WHERE id=?')
-                .run(invoice_date, finalAmount, req.params.id);
+            // Apply adjustment
+            let finalAmount = entriesTotal;
+            const adjAmount = parseFloat(adjustment_amount) || 0;
+            if (adjustment_type === 'addition') {
+                finalAmount = entriesTotal + adjAmount;
+            } else if (adjustment_type === 'subtraction') {
+                finalAmount = entriesTotal - adjAmount;
+            }
+
+            db.prepare('UPDATE invoices SET invoice_date=?, final_amount=?, adjustment_type=?, adjustment_amount=?, adjustment_reason=? WHERE id=?')
+                .run(invoice_date, finalAmount, adjustment_type || '', adjAmount, adjustment_reason || '', req.params.id);
 
             const update = db.prepare('UPDATE entries SET invoice_id = ? WHERE id = ?');
             for (const eid of entry_ids) {

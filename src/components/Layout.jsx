@@ -49,6 +49,14 @@ export default function Layout() {
                         <NavLink to="/dashboard" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
                             <span className="nav-icon">📊</span> Invoice Dashboard
                         </NavLink>
+                        <NavLink to="/outstanding" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                            <span className="nav-icon">💰</span> Outstanding
+                        </NavLink>
+
+                        <div className="sidebar-section">Payroll</div>
+                        <NavLink to="/workers" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                            <span className="nav-icon">👷</span> Workers & Salary
+                        </NavLink>
 
                         <div className="sidebar-section">Settings</div>
                         <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
