@@ -208,95 +208,89 @@ export function buildPdfDefinition(invoice, logoBase64) {
         text: '॥ श्री कृष्णं वन्दे जगद्गुरुम् ॥',
         font: 'Mangal',
         bold: true,
-        fontSize: 11,
-        color: '#dc2626', // Deep red for Sanskrit header
+        fontSize: 10,
+        color: '#dc2626',
         alignment: 'center',
-        margin: [0, 0, 0, 6]
+        margin: [0, 0, 0, 8]
     });
 
-    // 2. Company Logo + Name
+    // 2. Company Logo + Details Header
+    const companyHeaderColumns = [];
     if (logoBase64) {
-        content.push({
-            columns: [
-                { width: '*', text: '' },
-                { image: logoBase64, width: 70, alignment: 'center' },
-                {
-                    width: 'auto',
-                    text: invoice.company_name || 'TEMPO SERVICES',
-                    bold: true,
-                    fontSize: 18,
-                    color: '#1e40af', // Blue company name
-                    alignment: 'center',
-                    margin: [10, 8, 10, 0]
-                },
-                { image: logoBase64, width: 70, alignment: 'center' },
-                { width: '*', text: '' },
-            ],
-            margin: [0, 0, 0, 4]
-        });
-    } else {
-        content.push({
-            text: invoice.company_name || 'Transport Company', style: 'companyName', alignment: 'center'
-        });
-        content.push({ text: invoice.company_address || '', alignment: 'center', fontSize: 10, color: '#666', margin: [0, 0, 0, 2] });
+        companyHeaderColumns.push({ image: logoBase64, width: 80, alignment: 'left' });
     }
 
-    // 3. Company Address + Phone
-    const addressParts = [];
-    if (invoice.company_address) addressParts.push(invoice.company_address);
-    if (invoice.company_phone) addressParts.push(`Mob. no. : ${invoice.company_phone}`);
-    if (addressParts.length > 0) {
-        content.push({
-            text: addressParts.join('. ') + '.',
-            fontSize: 9,
-            alignment: 'center',
-            margin: [0, 0, 0, 12]
-        });
+    const companyDetailsStack = [
+        { text: invoice.company_name || 'TRANSPORT COMPANY', bold: true, fontSize: 24, color: '#0f172a', margin: [0, 0, 0, 4] }
+    ];
+    if (invoice.company_address) {
+        companyDetailsStack.push({ text: invoice.company_address, fontSize: 10, color: '#334155', margin: [0, 0, 0, 2] });
+    }
+    if (invoice.company_phone) {
+        companyDetailsStack.push({ text: 'Mob: ' + invoice.company_phone, fontSize: 10, color: '#334155' });
     }
 
-    // 4. Client Name + Bill Number row
+    companyHeaderColumns.push({
+        width: '*',
+        stack: companyDetailsStack,
+        alignment: logoBase64 ? 'right' : 'center'
+    });
+
+    content.push({
+        columns: companyHeaderColumns,
+        margin: [0, 0, 0, 15]
+    });
+
+    // Divider & Title
+    content.push({
+        canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1.5, lineColor: '#cbd5e1' }],
+        margin: [0, 0, 0, 15]
+    });
+    content.push({
+        text: 'INVOICE',
+        bold: true,
+        fontSize: 16,
+        alignment: 'center',
+        letterSpacing: 2,
+        color: '#1e3a8a',
+        margin: [0, -8, 0, 20]
+    });
+
+    // 3. Client & Bill Info row
     content.push({
         columns: [
             {
                 width: '60%',
-                text: [
-                    { text: 'Company Name :-  ', fontSize: 10, color: '#475569' },
-                    { text: invoice.client_name || 'Client', bold: true, fontSize: 13, color: '#0f172a' },
+                stack: [
+                    { text: 'Bill To:', fontSize: 9, bold: true, color: '#64748b', margin: [0, 0, 0, 2] },
+                    { text: invoice.client_name || 'Client', bold: true, fontSize: 12, color: '#0f172a' },
+                    ...(invoice.client_address ? [{ text: invoice.client_address, fontSize: 10, color: '#334155', margin: [0, 2, 0, 0] }] : [])
                 ]
             },
             {
                 width: '40%',
-                alignment: 'right',
-                text: [
-                    { text: 'Bill no. : ', fontSize: 10, color: '#475569' },
-                    { text: invoice.invoice_number || '', bold: true, fontSize: 11, color: '#dc2626' }
-                ]
+                stack: [
+                    {
+                        columns: [
+                            { text: 'Invoice No:', fontSize: 10, bold: true, color: '#64748b', width: 70 },
+                            { text: invoice.invoice_number || '', bold: true, fontSize: 11, color: '#dc2626', alignment: 'right' }
+                        ],
+                        margin: [0, 0, 0, 4]
+                    },
+                    {
+                        columns: [
+                            { text: 'Date:', fontSize: 10, bold: true, color: '#64748b', width: 70 },
+                            { text: invoice.invoice_date || '', fontSize: 10, alignment: 'right', color: '#0f172a' }
+                        ]
+                    }
+                ],
+                alignment: 'right'
             }
         ],
-        margin: [0, 8, 0, 2] // Added top margin
+        margin: [0, 0, 0, 20]
     });
 
-    // Client Address
-    if (invoice.client_address) {
-        content.push({
-            text: invoice.client_address,
-            fontSize: 10,
-            color: '#666',
-            margin: [0, 4, 0, 8] // top, right, bottom, left
-        });
-    }
-
-    // 5. Date row
-    content.push({
-        text: [
-            { text: 'Date    :  ', fontSize: 10 },
-            { text: invoice.invoice_date || '', bold: true, fontSize: 10 }
-        ],
-        alignment: 'right',
-        margin: [0, 0, 0, 10]
-    });
-
-    // 6. Data Table with full borders
+    // 4. Data Table with clean styling
     content.push({
         table: {
             headerRows: 1,
@@ -304,23 +298,28 @@ export function buildPdfDefinition(invoice, logoBase64) {
             body: tableBody
         },
         layout: {
-            hLineWidth: () => 0.8,
-            vLineWidth: () => 0.8,
-            hLineColor: () => '#555555',
-            vLineColor: () => '#555555',
-            paddingTop: () => 5,
-            paddingBottom: () => 5,
-            paddingLeft: () => 4,
-            paddingRight: () => 4,
+            hLineWidth: (i, node) => (i === 0 || i === 1 || i === node.table.body.length) ? 1.5 : 0.5,
+            vLineWidth: (i, node) => (i === 0 || i === node.table.widths.length) ? 1.5 : 0.5,
+            hLineColor: () => '#94a3b8',
+            vLineColor: () => '#94a3b8',
+            fillColor: (rowIndex, node) => {
+                if (rowIndex === 0) return '#f1f5f9';
+                if (rowIndex >= node.table.body.length - (hasAdjustment ? 3 : 1)) return '#f8fafc';
+                return null;
+            },
+            paddingTop: (i, node) => (i === 0 || i >= node.table.body.length - (hasAdjustment ? 3 : 1)) ? 8 : 6,
+            paddingBottom: (i, node) => (i === 0 || i >= node.table.body.length - (hasAdjustment ? 3 : 1)) ? 8 : 6,
+            paddingLeft: () => 6,
+            paddingRight: () => 6,
         },
     });
 
-    // 7. Footer — PAN + Owner/Signatory & background border
+    // 5. Footer and Background border
     return {
         background: function (currentPage, pageSize) {
             return {
                 canvas: [
-                    { type: 'rect', x: 20, y: 20, w: pageSize.width - 40, h: pageSize.height - 40, lineWidth: 1.5, lineColor: '#1e3a8a' }
+                    { type: 'rect', x: 20, y: 20, w: pageSize.width - 40, h: pageSize.height - 40, lineWidth: 1, lineColor: '#cbd5e1' }
                 ]
             };
         },
@@ -329,25 +328,27 @@ export function buildPdfDefinition(invoice, logoBase64) {
             return {
                 columns: [
                     {
-                        text: invoice.pan_id ? `PAN NO. :- ${invoice.pan_id}` : '',
+                        text: invoice.pan_id ? `PAN NO: ${invoice.pan_id}` : '',
                         bold: true,
                         fontSize: 9,
-                        margin: [40, 10, 0, 0]
+                        margin: [40, 10, 0, 0],
+                        color: '#475569'
                     },
                     {
-                        text: invoice.owner_name || '',
+                        text: invoice.owner_name ? `Auth. Signatory: \n\n${invoice.owner_name}` : '',
                         bold: true,
                         fontSize: 9,
                         alignment: 'right',
-                        margin: [0, 10, 40, 0]
+                        margin: [0, 10, 40, 0],
+                        color: '#475569'
                     }
                 ]
             };
         },
         styles: {
-            tableHeader: { bold: true, fontSize: 9 },
+            tableHeader: { bold: true, fontSize: 9, color: '#334155' },
         },
-        defaultStyle: { font: 'Roboto', fontSize: 10 },
-        pageMargins: [40, 40, 40, 60],
+        defaultStyle: { font: 'Roboto', fontSize: 10, color: '#1e293b' },
+        pageMargins: [40, 40, 40, 70],
     };
 }

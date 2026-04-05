@@ -14,14 +14,16 @@ import vehiclesRouter from './routes/vehicles.js';
 import settingsRouter from './routes/settings.js';
 import outstandingRouter from './routes/outstanding.js';
 import workersRouter from './routes/workers.js';
+import scheduledEmailsRouter from './routes/scheduledEmails.js';
 import { startExpiryScheduler } from './scheduler.js';
+import { startEmailScheduler } from './emailScheduler.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const uploadsDir = path.join(__dirname, 'uploads');
 if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
 
 const app = express();
-const PORT = 9090;
+const PORT = process.env.PORT || 9090;
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -37,6 +39,17 @@ app.use('/api/vehicles', vehiclesRouter);
 app.use('/api/settings', settingsRouter);
 app.use('/api/outstanding', outstandingRouter);
 app.use('/api/workers', workersRouter);
+app.use('/api/scheduled-emails', scheduledEmailsRouter);
+
+// Serve built frontend (for production / IIS)
+const distPath = path.join(__dirname, '..', 'dist');
+if (fs.existsSync(distPath)) {
+    app.use(express.static(distPath));
+    app.get('*', (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/uploads')) return next();
+        res.sendFile(path.join(distPath, 'index.html'));
+    });
+}
 
 // Error handling middleware
 app.use((err, req, res, next) => {
@@ -48,5 +61,6 @@ app.use((err, req, res, next) => {
 
 app.listen(PORT, () => {
     console.log(`✅ Server running on http://localhost:${PORT}`);
-    startExpiryScheduler();
+    startExpiryScheduler();    // Document expiry reminders (hourly)
+    startEmailScheduler();     // Scheduled invoice emails (every 1 minute)
 });

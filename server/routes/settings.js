@@ -263,6 +263,38 @@ router.post('/restore', upload.single('backup'), (req, res) => {
     }
 });
 
+// POST reset database — deletes the database files and recreates them
+router.post('/reset-database', (req, res) => {
+    try {
+        // Create a safety backup of the current DB just in case
+        const backupPath = dbPath + '.pre-reset-backup';
+        if (fs.existsSync(dbPath)) {
+            fs.copyFileSync(dbPath, backupPath);
+        }
+
+        // CLOSE the database FIRST to release file locks
+        closeDatabase();
+
+        // Delete the database files
+        if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+        const walPath = dbPath + '-wal';
+        const shmPath = dbPath + '-shm';
+        if (fs.existsSync(walPath)) try { fs.unlinkSync(walPath); } catch (e) { /* ignore */ }
+        if (fs.existsSync(shmPath)) try { fs.unlinkSync(shmPath); } catch (e) { /* ignore */ }
+
+        // Reopen the database, which will recreate the tables
+        reopenDatabase();
+
+        res.json({
+            message: 'Database reset successfully! All data has been cleared.',
+            restart_required: false
+        });
+    } catch (err) {
+        console.error('Reset error:', err);
+        res.status(500).json({ error: `Reset failed: ${err.message}` });
+    }
+});
+
 // GET backup info (DB file size, last modified)
 router.get('/backup-info', (req, res) => {
     try {
