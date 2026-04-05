@@ -1,0 +1,41 @@
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)
+🔒 Database connection closed
+✅ Database connection reopened successfully
+[EmailScheduler] 📬 Found 1 scheduled email(s) ready to send
+[EmailScheduler] ✅ Email #2 sent to rohandhonde36@gmail.com — Invoice KGTS/26-27-001
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)
+[Scheduler] ⏱️ Next check in 60 minute(s)
+[Scheduler] ⏱️ Next check in 60 minute(s)
+[Scheduler] ⏱️ Next check in 60 minute(s)
+[Scheduler] ⏱️ Next check in 60 minute(s)
+[Scheduler] ⏱️ Next check in 60 minute(s)
+[Scheduler] ⏱️ Next check in 60 minute(s)
+[Scheduler] ⏱️ Next check in 60 minute(s)

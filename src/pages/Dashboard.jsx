@@ -9,6 +9,18 @@ export default function Dashboard() {
     const [loading, setLoading] = useState(true);
     const [viewInvoice, setViewInvoice] = useState(null);
 
+    // Schedule Send state
+    const [showScheduleModal, setShowScheduleModal] = useState(false);
+    const [scheduleInvoice, setScheduleInvoice] = useState(null);
+    const [scheduleDate, setScheduleDate] = useState('');
+    const [scheduleTime, setScheduleTime] = useState('');
+    const [scheduling, setScheduling] = useState(false);
+
+    // Scheduled emails list
+    const [showScheduledList, setShowScheduledList] = useState(false);
+    const [scheduledEmails, setScheduledEmails] = useState([]);
+    const [loadingScheduled, setLoadingScheduled] = useState(false);
+
     const load = async () => {
         setLoading(true);
         try { setInvoices(await api.getInvoices()); }
@@ -17,6 +29,13 @@ export default function Dashboard() {
     };
 
     useEffect(() => { load(); }, []);
+
+    const loadScheduledEmails = async () => {
+        setLoadingScheduled(true);
+        try { setScheduledEmails(await api.getScheduledEmails()); }
+        catch (e) { showToast(e.message, 'error'); }
+        setLoadingScheduled(false);
+    };
 
     const handleDelete = async (inv) => {
         if (!confirm(`Delete invoice ${inv.invoice_number}?`)) return;
@@ -87,6 +106,68 @@ export default function Dashboard() {
         }
     };
 
+    // ─── Schedule Send ─────────────────
+    const openScheduleModal = (inv) => {
+        setScheduleInvoice(inv);
+        // Default to tomorrow, 9 AM
+        const tomorrow = new Date();
+        tomorrow.setDate(tomorrow.getDate() + 1);
+        setScheduleDate(tomorrow.toISOString().split('T')[0]);
+        setScheduleTime('09:00');
+        setShowScheduleModal(true);
+    };
+
+    const handleScheduleSend = async () => {
+        if (!scheduleDate || !scheduleTime) {
+            showToast('Please select both date and time', 'error');
+            return;
+        }
+
+        const scheduledAt = new Date(`${scheduleDate}T${scheduleTime}:00`);
+        if (scheduledAt <= new Date()) {
+            showToast('Scheduled time must be in the future', 'error');
+            return;
+        }
+
+        setScheduling(true);
+        try {
+            const full = await api.getInvoice(scheduleInvoice.id);
+            if (!full.client_email) {
+                showToast('No email found for this client', 'error');
+                setScheduling(false);
+                return;
+            }
+
+            const logoBase64 = await loadLogoBase64();
+            const docDef = buildPdfDefinition(full, logoBase64);
+
+            pdfMake.createPdf(docDef).getBase64(async (base64) => {
+                try {
+                    await api.scheduleEmail(scheduleInvoice.id, scheduledAt.toISOString(), base64);
+                    showToast(`📅 Email scheduled for ${scheduledAt.toLocaleDateString()} at ${scheduledAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`);
+                    setShowScheduleModal(false);
+                    setScheduleInvoice(null);
+                } catch (e) {
+                    showToast('Failed to schedule email: ' + e.message, 'error');
+                } finally {
+                    setScheduling(false);
+                }
+            });
+        } catch (e) {
+            showToast('Failed to prepare email: ' + e.message, 'error');
+            setScheduling(false);
+        }
+    };
+
+    const handleCancelScheduled = async (id) => {
+        if (!confirm('Cancel this scheduled email?')) return;
+        try {
+            await api.cancelScheduledEmail(id);
+            showToast('Scheduled email cancelled');
+            loadScheduledEmails();
+        } catch (e) { showToast(e.message, 'error'); }
+    };
+
     const handleView = async (inv) => {
         try {
             const full = await api.getInvoice(inv.id);
@@ -100,10 +181,30 @@ export default function Dashboard() {
     const totalRevenue = invoices.reduce((s, i) => s + (i.final_amount || 0), 0);
     const paidRevenue = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.final_amount || 0), 0);
 
+    // Minimum datetime for schedule picker (now + 5 min)
+    const minDate = new Date().toISOString().split('T')[0];
+
+    const getStatusBadge = (status) => {
+        switch (status) {
+            case 'pending': return <span className="badge badge-warning">⏳ Pending</span>;
+            case 'sent': return <span className="badge badge-success">✅ Sent</span>;
+            case 'failed': return <span className="badge badge-danger" style={{ background: '#fef2f2', color: '#dc2626' }}>❌ Failed</span>;
+            case 'cancelled': return <span className="badge" style={{ background: '#f1f5f9', color: '#64748b' }}>🚫 Cancelled</span>;
+            default: return <span className="badge">{status}</span>;
+        }
+    };
+
     return (
         <div>
             <div className="page-header">
                 <h1><span className="page-header-icon">📊</span> Invoice Dashboard</h1>
+                <button
+                    className="btn btn-secondary"
+                    onClick={() => { setShowScheduledList(true); loadScheduledEmails(); }}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+                >
+                    📅 Scheduled Emails
+                </button>
             </div>
 
             {/* Stats */}
@@ -182,7 +283,10 @@ export default function Dashboard() {
                                         <div className="actions-group">
                                             <button className="btn btn-ghost btn-sm" onClick={() => handleView(inv)} title="View">👁️</button>
                                             <button className="btn btn-ghost btn-sm" onClick={() => handleSavePdf(inv)} title="Download PDF">📥</button>
-                                            <button className="btn btn-ghost btn-sm" onClick={() => handleEmail(inv)} title="Email">✉️</button>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => handleEmail(inv)} title="Send Email Now">✉️</button>
+                                            <button className="btn btn-ghost btn-sm" onClick={() => openScheduleModal(inv)} title="Schedule Email" style={{ position: 'relative' }}>
+                                                📅
+                                            </button>
                                             <button className="btn btn-ghost btn-sm" onClick={() => handleTogglePaid(inv)} title={inv.status === 'paid' ? 'Mark Unpaid' : 'Mark Paid'}>
                                                 {inv.status === 'paid' ? '↩️' : '✅'}
                                             </button>
@@ -322,6 +426,189 @@ export default function Dashboard() {
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setViewInvoice(null)}>Close</button>
                             <button className="btn btn-primary" onClick={() => { handleSavePdf(viewInvoice); }}>📥 Download PDF</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── Schedule Send Modal ─── */}
+            {showScheduleModal && scheduleInvoice && (
+                <div className="modal-overlay" onClick={() => { setShowScheduleModal(false); setScheduleInvoice(null); }}>
+                    <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: 480 }}>
+                        <div className="modal-header">
+                            <h2>📅 Schedule Email</h2>
+                            <button className="modal-close" onClick={() => { setShowScheduleModal(false); setScheduleInvoice(null); }}>×</button>
+                        </div>
+                        <div className="modal-body">
+                            {/* Invoice info card */}
+                            <div style={{
+                                background: 'var(--bg-secondary)',
+                                border: '1px solid var(--border-color)',
+                                borderRadius: 'var(--radius-md)',
+                                padding: 'var(--space-md)',
+                                marginBottom: 'var(--space-lg)'
+                            }}>
+                                <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
+                                    <span style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{scheduleInvoice.invoice_number}</span>
+                                    <span className="font-mono" style={{ fontWeight: 600, color: 'var(--accent-primary-hover)' }}>₹{(scheduleInvoice.final_amount || 0).toFixed(2)}</span>
+                                </div>
+                                <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)' }}>
+                                    {scheduleInvoice.client_name} • {scheduleInvoice.company_name}
+                                </div>
+                            </div>
+
+                            {/* Date picker */}
+                            <div className="form-group" style={{ marginBottom: 'var(--space-md)' }}>
+                                <label className="form-label required">Schedule Date</label>
+                                <input
+                                    className="form-input"
+                                    type="date"
+                                    value={scheduleDate}
+                                    onChange={e => setScheduleDate(e.target.value)}
+                                    min={minDate}
+                                />
+                            </div>
+
+                            {/* Time picker */}
+                            <div className="form-group" style={{ marginBottom: 'var(--space-md)' }}>
+                                <label className="form-label required">Schedule Time</label>
+                                <input
+                                    className="form-input"
+                                    type="time"
+                                    value={scheduleTime}
+                                    onChange={e => setScheduleTime(e.target.value)}
+                                />
+                            </div>
+
+                            {/* Quick time presets */}
+                            <div style={{ marginBottom: 'var(--space-md)' }}>
+                                <label className="form-label" style={{ marginBottom: 6 }}>Quick Presets</label>
+                                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                                    {[
+                                        { label: '🌅 9:00 AM', time: '09:00' },
+                                        { label: '☀️ 12:00 PM', time: '12:00' },
+                                        { label: '🌇 5:00 PM', time: '17:00' },
+                                        { label: '🌙 8:00 PM', time: '20:00' },
+                                    ].map(preset => (
+                                        <button
+                                            key={preset.time}
+                                            className={`btn btn-sm ${scheduleTime === preset.time ? 'btn-primary' : 'btn-ghost'}`}
+                                            onClick={() => setScheduleTime(preset.time)}
+                                            type="button"
+                                            style={{ fontSize: '0.82rem' }}
+                                        >
+                                            {preset.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Preview scheduled time */}
+                            {scheduleDate && scheduleTime && (
+                                <div style={{
+                                    background: 'linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%)',
+                                    border: '1px solid #93c5fd',
+                                    borderRadius: 'var(--radius-md)',
+                                    padding: 'var(--space-sm) var(--space-md)',
+                                    textAlign: 'center',
+                                    fontSize: '0.9rem',
+                                    color: '#1e40af'
+                                }}>
+                                    ✉️ Email will be sent on <strong>{new Date(`${scheduleDate}T${scheduleTime}`).toLocaleDateString('en-IN', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</strong> at <strong>{new Date(`${scheduleDate}T${scheduleTime}`).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</strong>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => { setShowScheduleModal(false); setScheduleInvoice(null); }}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleScheduleSend} disabled={scheduling}>
+                                {scheduling ? <span className="spinner"></span> : '📅 Schedule Send'}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ─── Scheduled Emails List Modal ─── */}
+            {showScheduledList && (
+                <div className="modal-overlay" onClick={() => setShowScheduledList(false)}>
+                    <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: 850 }}>
+                        <div className="modal-header">
+                            <h2>📅 Scheduled Emails</h2>
+                            <button className="modal-close" onClick={() => setShowScheduledList(false)}>×</button>
+                        </div>
+                        <div className="modal-body">
+                            {loadingScheduled ? (
+                                <div className="empty-state"><div className="spinner" style={{ margin: '0 auto' }}></div></div>
+                            ) : scheduledEmails.length === 0 ? (
+                                <div className="empty-state" style={{ padding: 'var(--space-xl)' }}>
+                                    <div className="empty-state-icon">📅</div>
+                                    <p>No scheduled emails yet. Use the 📅 button on an invoice to schedule one.</p>
+                                </div>
+                            ) : (
+                                <div className="table-container">
+                                    <table>
+                                        <thead>
+                                            <tr>
+                                                <th>Invoice</th>
+                                                <th>Client</th>
+                                                <th>Scheduled For</th>
+                                                <th>Status</th>
+                                                <th>Created</th>
+                                                <th>Actions</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {scheduledEmails.map(se => (
+                                                <tr key={se.id}>
+                                                    <td>
+                                                        <span className="font-mono" style={{ fontWeight: 600, color: 'var(--accent-primary-hover)' }}>
+                                                            {se.invoice_number}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ fontWeight: 500 }}>{se.client_name}</td>
+                                                    <td>
+                                                        <div className="font-mono" style={{ fontSize: '0.88rem' }}>
+                                                            {new Date(se.scheduled_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}
+                                                        </div>
+                                                        <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)' }}>
+                                                            {new Date(se.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                        </div>
+                                                    </td>
+                                                    <td>{getStatusBadge(se.status)}</td>
+                                                    <td style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                                        {new Date(se.created_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })}
+                                                    </td>
+                                                    <td>
+                                                        {se.status === 'pending' && (
+                                                            <button
+                                                                className="btn btn-ghost btn-sm text-danger"
+                                                                onClick={() => handleCancelScheduled(se.id)}
+                                                                title="Cancel"
+                                                            >
+                                                                🚫
+                                                            </button>
+                                                        )}
+                                                        {se.status === 'failed' && se.error_message && (
+                                                            <span title={se.error_message} style={{ cursor: 'help', fontSize: '0.8rem', color: '#dc2626' }}>
+                                                                ⓘ {se.error_message.substring(0, 30)}{se.error_message.length > 30 ? '…' : ''}
+                                                            </span>
+                                                        )}
+                                                        {se.status === 'sent' && se.sent_at && (
+                                                            <span style={{ fontSize: '0.78rem', color: 'var(--success)' }}>
+                                                                Sent {new Date(se.sent_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                            </span>
+                                                        )}
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            )}
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setShowScheduledList(false)}>Close</button>
+                            <button className="btn btn-ghost" onClick={loadScheduledEmails} disabled={loadingScheduled}>🔄 Refresh</button>
                         </div>
                     </div>
                 </div>

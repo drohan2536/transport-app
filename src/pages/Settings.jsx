@@ -31,6 +31,11 @@ export default function Settings() {
     const [showRestoreConfirm, setShowRestoreConfirm] = useState(false);
     const fileInputRef = useRef(null);
 
+    // Reset Database state
+    const [resetDbLoading, setResetDbLoading] = useState(false);
+    const [showResetDbConfirm, setShowResetDbConfirm] = useState(false);
+    const [resetDbText, setResetDbText] = useState('');
+
     useEffect(() => {
         api.getSmtp().then(cfg => {
             setSmtpForm({
@@ -102,6 +107,27 @@ export default function Settings() {
             showToast(err.message, 'error');
         }
         setRestoreLoading(false);
+    };
+
+    const handleResetDatabase = async () => {
+        if (resetDbText !== 'RESET') {
+            showToast('Please type RESET to confirm', 'error');
+            return;
+        }
+        setShowResetDbConfirm(false);
+        setResetDbLoading(true);
+        try {
+            const res = await api.resetDatabase();
+            showToast(res.message, 'success');
+            setResetDbText('');
+            // Reload the page after a short delay so the UI reflects the reset data
+            setTimeout(() => {
+                window.location.reload();
+            }, 1500);
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+        setResetDbLoading(false);
     };
 
     const handleSmtpSave = async (e) => {
@@ -586,6 +612,25 @@ export default function Settings() {
                         </button>
                     </div>
 
+                    {/* Reset Database Section */}
+                    <div className="card" style={{ maxWidth: 640, marginTop: '1.5rem', border: '1px solid var(--danger)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--space-sm)' }}>
+                            <span style={{ fontSize: '1.5rem' }}>💥</span>
+                            <h3 style={{ margin: 0, color: 'var(--danger)' }}>Reset Database</h3>
+                        </div>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 'var(--space-lg)' }}>
+                            Permanently delete all data and reset the database to its initial empty state. <strong>This action cannot be undone.</strong>
+                        </p>
+                        <button
+                            className="btn btn-primary"
+                            disabled={resetDbLoading}
+                            onClick={() => setShowResetDbConfirm(true)}
+                            style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+                        >
+                            {resetDbLoading ? '⏳ Resetting...' : '💥 Reset Database'}
+                        </button>
+                    </div>
+
                     {/* Restore Confirmation Modal */}
                     {showRestoreConfirm && (
                         <div style={{
@@ -627,6 +672,56 @@ export default function Settings() {
                                         style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                                     >
                                         🚨 Yes, Restore
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Reset Database Confirmation Modal */}
+                    {showResetDbConfirm && (
+                        <div style={{
+                            position: 'fixed', top: 0, left: 0, right: 0, bottom: 0,
+                            background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            zIndex: 1000, backdropFilter: 'blur(4px)'
+                        }}>
+                            <div style={{
+                                background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: '28px 32px',
+                                maxWidth: 440, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                                animation: 'slideUp 0.2s ease'
+                            }}>
+                                <div style={{ fontSize: '2rem', textAlign: 'center', marginBottom: '12px' }}>💥</div>
+                                <h3 style={{ textAlign: 'center', marginBottom: '8px', color: 'var(--danger)' }}>Confirm Database Reset</h3>
+                                <p style={{ textAlign: 'center', fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '12px' }}>
+                                    You are about to <strong>permanently delete all data</strong>. This action will reset the application to its factory state.
+                                </p>
+                                <p style={{ textAlign: 'center', fontSize: '0.82rem', color: 'var(--danger)', fontWeight: 600, marginBottom: '20px' }}>
+                                    ⚠️ Type 'RESET' below to confirm this action.
+                                </p>
+                                <div style={{ marginBottom: '20px' }}>
+                                    <input
+                                        className="form-input"
+                                        style={{ textAlign: 'center', border: '1px solid var(--danger)' }}
+                                        placeholder="Type RESET"
+                                        value={resetDbText}
+                                        onChange={(e) => setResetDbText(e.target.value)}
+                                    />
+                                </div>
+                                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                                    <button
+                                        className="btn"
+                                        onClick={() => { setShowResetDbConfirm(false); setResetDbText(''); }}
+                                        style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={handleResetDatabase}
+                                        disabled={resetDbText !== 'RESET'}
+                                        style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+                                    >
+                                        💥 Confirm Reset
                                     </button>
                                 </div>
                             </div>

@@ -43,7 +43,7 @@ async function sendReminderEmail(smtp, doc, diffDays) {
     });
 
     await transporter.sendMail({
-        from: `"MorMukut Transport" <${smtp.username}>`,
+        from: `"Krishna Govinda Tempo Services" <${smtp.username}>`,
         to: recipientEmail,
         subject,
         html: `
@@ -85,7 +85,7 @@ async function sendReminderEmail(smtp, doc, diffDays) {
                     </table>
                     <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
                     <p style="color: #6b7280; font-size: 0.85em; margin: 0;">
-                        This is an automated reminder from MorMukut Transport Billing System.<br/>
+                        This is an automated reminder from Krishna Govinda Tempo Services Billing System.<br/>
                         Please renew the document at the earliest to avoid any issues.
                     </p>
                 </div>
@@ -178,3 +178,4 @@ export function restartExpiryScheduler() {
     console.log(`[Scheduler] 🔄 Scheduler restarted — new interval: ${intervalMin} minute(s)`);
     scheduleNext();
 }
+

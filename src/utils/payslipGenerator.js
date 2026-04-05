@@ -10,31 +10,30 @@ export function buildPayslipPdf(data, logoBase64) {
 
     // ===== HEADER =====
     content.push({
-        text: 'PAYSLIP',
-        bold: true,
-        fontSize: 20,
-        color: '#1e40af',
-        alignment: 'center',
-        margin: [0, 0, 0, 4]
-    });
-    content.push({
-        text: 'MorMukut Transport',
-        bold: true, fontSize: 14, alignment: 'center', color: '#334155',
-        margin: [0, 0, 0, 2]
-    });
-
-    // Period
-    content.push({
-        text: `Pay Period: ${data.from_date}  to  ${data.to_date}`,
-        fontSize: 10, alignment: 'center', color: '#64748b',
-        margin: [0, 0, 0, 16]
+        columns: [
+            {
+                width: '*',
+                stack: [
+                    { text: 'Krishna Govinda Tempo Services', bold: true, fontSize: 20, color: '#0f172a', margin: [0, 0, 0, 4] },
+                    { text: 'SALARY PAYSLIP', bold: true, fontSize: 14, color: '#334155', letterSpacing: 1 }
+                ]
+            },
+            {
+                width: 'auto',
+                stack: [
+                    { text: 'Pay Period', fontSize: 9, bold: true, color: '#64748b', alignment: 'right', margin: [0, 0, 0, 2] },
+                    { text: `${data.from_date} to ${data.to_date}`, fontSize: 11, bold: true, color: '#0f172a', alignment: 'right' }
+                ]
+            }
+        ],
+        margin: [0, 0, 0, 15]
     });
 
     // Separator
-    content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1.5, lineColor: '#1e40af' }], margin: [0, 0, 0, 12] });
+    content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1.5, lineColor: '#cbd5e1' }], margin: [0, 0, 0, 15] });
 
     // ===== WORKER DETAILS =====
-    content.push({ text: 'Worker Details', bold: true, fontSize: 12, color: '#1e40af', margin: [0, 0, 0, 8] });
+    content.push({ text: 'Worker Details', bold: true, fontSize: 11, color: '#334155', margin: [0, 0, 0, 8] });
 
     content.push({
         table: {
@@ -73,7 +72,7 @@ export function buildPayslipPdf(data, logoBase64) {
     });
 
     // ===== ATTENDANCE SUMMARY =====
-    content.push({ text: 'Attendance Summary', bold: true, fontSize: 12, color: '#1e40af', margin: [0, 0, 0, 8] });
+    content.push({ text: 'Attendance Summary', bold: true, fontSize: 11, color: '#334155', margin: [0, 0, 0, 8] });
 
     content.push({
         table: {
@@ -136,7 +135,7 @@ export function buildPayslipPdf(data, logoBase64) {
     }
 
     // ===== SALARY CALCULATION =====
-    content.push({ text: 'Salary Calculation', bold: true, fontSize: 12, color: '#1e40af', margin: [0, 0, 0, 8] });
+    content.push({ text: 'Salary Calculation', bold: true, fontSize: 11, color: '#334155', margin: [0, 0, 0, 8] });
 
     content.push({
         table: {
@@ -294,7 +293,7 @@ export function buildPayslipPdf(data, logoBase64) {
     }
 
     // ===== NET PAY SUMMARY =====
-    content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#1e40af' }], margin: [0, 12, 0, 8] });
+    content.push({ canvas: [{ type: 'line', x1: 0, y1: 0, x2: 515, y2: 0, lineWidth: 1, lineColor: '#94a3b8' }], margin: [0, 12, 0, 8] });
 
     const netPayBody = [
         [
@@ -319,7 +318,7 @@ export function buildPayslipPdf(data, logoBase64) {
     }
 
     netPayBody.push([
-        { text: 'NET PAY', bold: true, fontSize: 14, color: '#1e40af' },
+        { text: 'NET PAY', bold: true, fontSize: 12, color: '#0f172a' },
         { text: `₹ ${fmt(data.net_salary)}`, bold: true, fontSize: 14, alignment: 'right', color: data.net_salary >= 0 ? '#16a34a' : '#dc2626' }
     ]);
 
@@ -331,7 +330,7 @@ export function buildPayslipPdf(data, logoBase64) {
         layout: {
             hLineWidth: (i, node) => i === node.table.body.length - 1 ? 1.5 : 0.5,
             vLineWidth: () => 0,
-            hLineColor: (i, node) => i === node.table.body.length - 1 ? '#1e40af' : '#e2e8f0',
+            hLineColor: (i, node) => i === node.table.body.length - 1 ? '#475569' : '#e2e8f0',
             paddingTop: (i, node) => i === node.table.body.length - 1 ? 10 : 6,
             paddingBottom: (i, node) => i === node.table.body.length - 1 ? 10 : 6,
             paddingLeft: () => 8,
@@ -350,19 +349,12 @@ export function buildPayslipPdf(data, logoBase64) {
     });
 
     return {
-        background: function (currentPage, pageSize) {
-            return {
-                canvas: [
-                    { type: 'rect', x: 20, y: 20, w: pageSize.width - 40, h: pageSize.height - 40, lineWidth: 1.5, lineColor: '#1e40af' }
-                ]
-            };
-        },
         content,
         footer: (currentPage, pageCount) => ({
-            text: `Generated on ${new Date().toLocaleDateString('en-IN')} | Page ${currentPage} of ${pageCount}`,
-            alignment: 'center', fontSize: 7, color: '#94a3b8', margin: [0, 10, 0, 0]
+            text: `Generated on ${new Date().toLocaleDateString('en-IN')} | Page ${currentPage} of ${pageCount} | Krishna Govinda Tempo Services`,
+            alignment: 'center', fontSize: 8, color: '#94a3b8', margin: [0, 10, 0, 0]
         }),
-        defaultStyle: { font: 'Roboto', fontSize: 10 },
+        defaultStyle: { font: 'Roboto', fontSize: 10, color: '#1e293b' },
         pageMargins: [40, 40, 40, 50],
     };
 }

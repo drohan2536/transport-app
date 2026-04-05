@@ -1,0 +1,32 @@
+<service>
+	<id>transportapp.exe</id>
+	<name>TransportApp</name>
+	<description>Krishna Govinda Tempo Services — Billing &amp; Invoice System</description>
+	<executable>C:\Program Files\nodejs\node.exe</executable>
+	<argument>C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js</argument>
+	<argument>--file</argument>
+	<argument>C:\Users\rohan\.gemini\antigravity\scratch\transport-app\service-launcher.cjs</argument>
+	<argument>--scriptoptions=</argument>
+	<argument>--log</argument>
+	<argument>TransportApp wrapper</argument>
+	<argument>--grow</argument>
+	<argument>0.25</argument>
+	<argument>--wait</argument>
+	<argument>1</argument>
+	<argument>--maxrestarts</argument>
+	<argument>3</argument>
+	<argument>--abortonerror</argument>
+	<argument>n</argument>
+	<argument>--stopparentfirst</argument>
+	<argument>undefined</argument>
+	<logmode>rotate</logmode>
+	<stoptimeout>30sec</stoptimeout>
+	<env name="NODE_ENV" value="production"/>
+	<env name="PORT" value="9090"/>
+	<serviceaccount>
+		<domain>RD</domain>
+		<user>LocalSystem</user>
+		<password></password>
+	</serviceaccount>
+	<workingdirectory>C:\Users\rohan\.gemini\antigravity\scratch\transport-app</workingdirectory>
+</service>

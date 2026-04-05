@@ -203,6 +203,17 @@ function initializeDatabase(dbInstance) {
     UNIQUE(abbreviation, fy_pattern)
   );
 
+  CREATE TABLE IF NOT EXISTS scheduled_emails (
+    id              INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_id      INTEGER NOT NULL REFERENCES invoices(id) ON DELETE CASCADE,
+    scheduled_at    TEXT NOT NULL,
+    pdf_base64      TEXT NOT NULL,
+    status          TEXT DEFAULT 'pending' CHECK(status IN ('pending','sent','failed','cancelled')),
+    error_message   TEXT DEFAULT '',
+    created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+    sent_at         DATETIME DEFAULT NULL
+  );
+
   INSERT OR IGNORE INTO smtp_config (id) VALUES (1);
   INSERT OR IGNORE INTO app_settings (id) VALUES (1);
 `);

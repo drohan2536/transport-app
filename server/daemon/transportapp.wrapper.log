@@ -1,0 +1,68 @@
+2026-04-01 23:53:55 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-04-01 23:53:55 - Started 11996
+2026-04-02 00:37:49 - Stopping transportapp.exe
+2026-04-02 00:37:49 - ProcessKill 11996
+2026-04-02 00:37:50 - Shutdown exception
+Message:A system shutdown is in progress.
+
+Stacktrace:   at System.Runtime.InteropServices.Marshal.ThrowExceptionForHRInternal(Int32 errorCode, IntPtr errorInfo)
+   at System.Management.ManagementScope.InitializeGuts(Object o)
+   at System.Management.ManagementScope.Initialize()
+   at System.Management.ManagementObjectSearcher.Initialize()
+   at System.Management.ManagementObjectSearcher.Get()
+   at winsw.WrapperService.GetChildPids(Int32 pid)
+   at winsw.WrapperService.StopProcessAndChildren(Int32 pid)
+   at winsw.WrapperService.StopIt()
+   at winsw.WrapperService.OnShutdown()
+2026-04-02 00:38:29 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-04-02 00:38:29 - Started 6856
+2026-04-02 00:39:15 - Stopping transportapp.exe
+2026-04-02 00:39:15 - ProcessKill 6856
+2026-04-02 00:39:15 - Shutdown exception
+Message:A system shutdown is in progress.
+
+Stacktrace:   at System.Runtime.InteropServices.Marshal.ThrowExceptionForHRInternal(Int32 errorCode, IntPtr errorInfo)
+   at System.Management.ManagementScope.InitializeGuts(Object o)
+   at System.Management.ManagementScope.Initialize()
+   at System.Management.ManagementObjectSearcher.Initialize()
+   at System.Management.ManagementObjectSearcher.Get()
+   at winsw.WrapperService.GetChildPids(Int32 pid)
+   at winsw.WrapperService.StopProcessAndChildren(Int32 pid)
+   at winsw.WrapperService.StopIt()
+   at winsw.WrapperService.OnShutdown()
+2026-04-02 00:39:59 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-04-02 00:39:59 - Started 7100
+2026-04-02 00:40:20 - Stopping transportapp.exe
+2026-04-02 00:40:20 - ProcessKill 7100
+2026-04-02 00:40:20 - Shutdown exception
+Message:A system shutdown is in progress.
+
+Stacktrace:   at System.Runtime.InteropServices.Marshal.ThrowExceptionForHRInternal(Int32 errorCode, IntPtr errorInfo)
+   at System.Management.ManagementScope.InitializeGuts(Object o)
+   at System.Management.ManagementScope.Initialize()
+   at System.Management.ManagementObjectSearcher.Initialize()
+   at System.Management.ManagementObjectSearcher.Get()
+   at winsw.WrapperService.GetChildPids(Int32 pid)
+   at winsw.WrapperService.StopProcessAndChildren(Int32 pid)
+   at winsw.WrapperService.StopIt()
+   at winsw.WrapperService.OnShutdown()
+2026-04-02 00:40:59 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-04-02 00:40:59 - Started 7144
+2026-04-02 00:41:13 - Stopping transportapp.exe
+2026-04-02 00:41:13 - ProcessKill 7144
+2026-04-02 00:41:14 - Shutdown exception
+Message:A system shutdown is in progress.
+
+Stacktrace:   at System.Runtime.InteropServices.Marshal.ThrowExceptionForHRInternal(Int32 errorCode, IntPtr errorInfo)
+   at System.Management.ManagementScope.InitializeGuts(Object o)
+   at System.Management.ManagementScope.Initialize()
+   at System.Management.ManagementObjectSearcher.Initialize()
+   at System.Management.ManagementObjectSearcher.Get()
+   at winsw.WrapperService.GetChildPids(Int32 pid)
+   at winsw.WrapperService.StopProcessAndChildren(Int32 pid)
+   at winsw.WrapperService.StopIt()
+   at winsw.WrapperService.OnShutdown()
+2026-04-02 00:42:42 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-04-02 00:42:42 - Started 6280
+2026-04-05 12:03:04 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-04-05 12:03:04 - Started 6808

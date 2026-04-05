@@ -66,6 +66,12 @@ export const api = {
     markPaid: (id) => request(`/invoices/${id}/paid`, { method: 'PUT' }),
     emailInvoice: (id, pdfBase64) => request(`/invoices/${id}/email`, { method: 'POST', body: JSON.stringify({ pdfBase64 }) }),
 
+    // Scheduled Emails
+    getScheduledEmails: () => request('/scheduled-emails'),
+    getScheduledEmailsForInvoice: (invoiceId) => request(`/scheduled-emails/invoice/${invoiceId}`),
+    scheduleEmail: (invoice_id, scheduled_at, pdfBase64) => request('/scheduled-emails', { method: 'POST', body: JSON.stringify({ invoice_id, scheduled_at, pdfBase64 }) }),
+    cancelScheduledEmail: (id) => request(`/scheduled-emails/${id}`, { method: 'DELETE' }),
+
     // Outstanding
     getOutstanding: (from_date, to_date) => request(`/outstanding?from_date=${from_date}&to_date=${to_date}`),
     getOutstandingDetail: (clientId, from_date, to_date) => request(`/outstanding/client/${clientId}?from_date=${from_date}&to_date=${to_date}`),
@@ -79,6 +85,7 @@ export const api = {
     updateSettings: (data) => request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
     resetInvoiceNumber: (data) => request('/settings/reset-invoice-number', { method: 'POST', body: JSON.stringify(data) }),
     getInvoiceOverrides: () => request('/settings/invoice-overrides'),
+    resetDatabase: () => request('/settings/reset-database', { method: 'POST' }),
 
     // Backup & Restore
     getBackupInfo: () => request('/settings/backup-info'),

@@ -100,7 +100,7 @@ router.post('/:id/send-reminder', async (req, res) => {
         });
 
         await transporter.sendMail({
-            from: `"MorMukut Transport" <${smtp.username}>`,
+            from: `"Krishna Govinda Tempo Services" <${smtp.username}>`,
             to: recipientEmail,
             subject,
             html: `
@@ -142,7 +142,7 @@ router.post('/:id/send-reminder', async (req, res) => {
                         </table>
                         <hr style="border: none; border-top: 1px solid #e5e7eb; margin: 20px 0;" />
                         <p style="color: #6b7280; font-size: 0.85em; margin: 0;">
-                            This is an automated reminder from MorMukut Transport Billing System.<br/>
+                            This is an automated reminder from Krishna Govinda Tempo Services Billing System.<br/>
                             Please renew the document at the earliest to avoid any issues.
                         </p>
                     </div>

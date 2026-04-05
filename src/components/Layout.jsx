@@ -23,7 +23,7 @@ export default function Layout() {
                     <div className="sidebar-brand">
                         <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '5px' }}>
                             <img src={logo} alt="Logo" style={{ height: '40px', width: 'auto' }} />
-                            <h1 style={{ fontSize: '1.2rem', lineHeight: '1.2' }}>MorMukut Transport<br />Billing System</h1>
+                            <h1 style={{ fontSize: '1.2rem', lineHeight: '1.2' }}>Krishna Govinda<br />Tempo Services</h1>
                         </div>
                         <div className="brand-sub">Smart Transport Billing for KGTS & VTS</div>
                     </div>
