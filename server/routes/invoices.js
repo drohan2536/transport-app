@@ -149,10 +149,13 @@ router.post('/', (req, res) => {
             finalAmount = entriesTotal - adjAmount;
         }
 
+        const allPaid = entries.length > 0 && entries.every(e => e.is_paid === 1);
+        const initialStatus = allPaid ? 'paid' : 'unpaid';
+
         const result = db.prepare(`
-      INSERT INTO invoices (invoice_number, client_id, company_id, invoice_date, from_date, to_date, final_amount, adjustment_type, adjustment_amount, adjustment_reason)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `).run(invoiceNumber, client_id, client.company_id, invoice_date || new Date().toISOString().split('T')[0], from_date, to_date, finalAmount, adjustment_type || '', adjAmount, adjustment_reason || '');
+      INSERT INTO invoices (invoice_number, client_id, company_id, invoice_date, from_date, to_date, final_amount, adjustment_type, adjustment_amount, adjustment_reason, status)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(invoiceNumber, client_id, client.company_id, invoice_date || new Date().toISOString().split('T')[0], from_date, to_date, finalAmount, adjustment_type || '', adjAmount, adjustment_reason || '', initialStatus);
 
         // Link entries to invoice
         const update = db.prepare('UPDATE entries SET invoice_id = ? WHERE id = ?');

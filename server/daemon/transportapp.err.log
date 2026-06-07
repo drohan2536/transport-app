@@ -1,0 +1,11 @@
+[EmailScheduler] ❌ Email #1 failed: getaddrinfo ENOTFOUND smtp.gmail.com
+[EmailScheduler] ❌ Email #2 failed: getaddrinfo ENOTFOUND smtp.gmail.com
+[EmailScheduler] ❌ Email #3 failed: getaddrinfo ENOTFOUND smtp.gmail.com
+[EmailScheduler] ❌ Email #4 failed: getaddrinfo ENOTFOUND smtp.gmail.com
+Failed to resolve IPv6 addresses with current network
+Failed to resolve IPv6 addresses with current network
+Failed to resolve IPv6 addresses with current network
+Failed to resolve IPv6 addresses with current network
+Failed to resolve IPv6 addresses with current network
+Failed to resolve IPv6 addresses with current network
+Failed to resolve IPv6 addresses with current network

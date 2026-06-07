@@ -2,6 +2,7 @@ import logoUrl from '../assets/logo.svg';
 import { devanagariBase64 } from '../assets/devanagariFont.js';
 import * as pdfFonts from 'pdfmake/build/vfs_fonts';
 import pdfMake from 'pdfmake/build/pdfmake';
+import { formatUI } from './dateUtils.js';
 
 // Helper to convert image URL to Base64
 export const getBase64ImageFromURL = (url) => {
@@ -35,6 +36,45 @@ export const loadLogoBase64 = async () => {
         console.error('Logo load failed', e);
         return null;
     }
+};
+
+/**
+ * Load company-specific logo or fall back to default logo.
+ * @param {string} companyLogoPath - server path like '/uploads/logo_1_123.svg'
+ * @returns {Promise<string|null>} Base64 data URL
+ */
+export const loadCompanyLogoBase64 = async (companyLogoPath) => {
+    if (companyLogoPath) {
+        try {
+            // Construct full URL for the company logo
+            const baseUrl = window.location.origin;
+            const fullUrl = `${baseUrl}${companyLogoPath}`;
+            return await getBase64ImageFromURL(fullUrl);
+        } catch (e) {
+            console.error('Company logo load failed, falling back to default', e);
+        }
+    }
+    // Fall back to default logo
+    return loadLogoBase64();
+};
+
+/**
+ * Load company signature.
+ * @param {string} companySignaturePath - server path like '/uploads/signature_1_123.svg'
+ * @returns {Promise<string|null>} Base64 data URL
+ */
+export const loadCompanySignatureBase64 = async (companySignaturePath) => {
+    if (companySignaturePath) {
+        try {
+            // Construct full URL for the company signature
+            const baseUrl = window.location.origin;
+            const fullUrl = `${baseUrl}${companySignaturePath}`;
+            return await getBase64ImageFromURL(fullUrl);
+        } catch (e) {
+            console.error('Company signature load failed', e);
+        }
+    }
+    return null;
 };
 
 // Setup fonts for pdfMake
@@ -75,11 +115,19 @@ setupPdfFonts();
 
 export { pdfMake };
 
-export function buildPdfDefinition(invoice, logoBase64) {
+/**
+ * @param {object} invoice - Invoice data object from database
+ * @param {string} logoBase64 - Base64 string of the logo image
+ * @param {string} signatureBase64 - Base64 string of the signature image
+ * @returns {object} pdfMake document definition
+ */
+export function buildPdfDefinition(invoice, logoBase64, signatureBase64 = null) {
+    pdfMake.vfs = pdfMake.vfs || {};
+
     const entries = invoice.entries || [];
 
     // Default columns if none selected
-    const defaultCols = ['date', 'from_location', 'to_location', 'entry_type', 'challan_number', 'vehicle_number', 'amount', 'loading_charges', 'total_amount'];
+    const defaultCols = ['date', 'from_location', 'to_location', 'entry_type', 'challan_number', 'vehicle_number', 'weight', 'no_of_bundles', 'amount', 'loading_charges', 'total_amount'];
     let visibleColIds = [];
     try {
         visibleColIds = JSON.parse(invoice.invoice_visible_columns || '[]');
@@ -87,9 +135,15 @@ export function buildPdfDefinition(invoice, logoBase64) {
 
     if (visibleColIds.length === 0) visibleColIds = defaultCols;
 
+    // Merge weight and no_of_bundles into a single column when both are present
+    const hasBothWtBdl = visibleColIds.includes('weight') && visibleColIds.includes('no_of_bundles');
+    if (hasBothWtBdl) {
+        visibleColIds = visibleColIds.map(c => c === 'weight' ? '_wt_bdl_merged' : c).filter(c => c !== 'no_of_bundles');
+    }
+
     // Column Definitions
     const colDefs = {
-        date: { header: 'Date', width: 'auto', val: e => e.date },
+        date: { header: 'Date', width: 'auto', val: e => formatUI(e.date) },
         from_location: { header: 'From', width: '*', val: e => e.from_location },
         to_location: { header: 'To', width: '*', val: e => e.to_location },
         challan_number: { header: 'Challan', width: 'auto', val: e => e.has_challan ? e.challan_number : '-' },
@@ -108,6 +162,15 @@ export function buildPdfDefinition(invoice, logoBase64) {
         amount: { header: 'Amount', width: 'auto', align: 'right', val: e => `${(e.amount || 0).toFixed(2)}/-` },
         loading_charges: { header: 'Loading', width: 'auto', align: 'right', val: e => e.loading_charges ? `${e.loading_charges}/-` : '-' },
         total_amount: { header: 'Total', width: 'auto', align: 'right', bold: true, val: e => `${(e.total_amount || 0).toFixed(2)}/-` },
+        _wt_bdl_merged: {
+            header: 'Wt / Bundles', width: 'auto', align: 'right',
+            val: e => {
+                if (e.weight && e.no_of_bundles) return `${e.weight} Kg / ${e.no_of_bundles} Bundles`;
+                if (e.weight) return `${e.weight} Kg`;
+                if (e.no_of_bundles) return `${e.no_of_bundles} Bundles`;
+                return '-';
+            }
+        },
     };
 
     // Build table headers — always include Sr. no.
@@ -280,7 +343,7 @@ export function buildPdfDefinition(invoice, logoBase64) {
                     {
                         columns: [
                             { text: 'Date:', fontSize: 10, bold: true, color: '#64748b', width: 70 },
-                            { text: invoice.invoice_date || '', fontSize: 10, alignment: 'right', color: '#0f172a' }
+                            { text: formatUI(invoice.invoice_date) || '', fontSize: 10, alignment: 'right', color: '#0f172a' }
                         ]
                     }
                 ],
@@ -335,12 +398,13 @@ export function buildPdfDefinition(invoice, logoBase64) {
                         color: '#475569'
                     },
                     {
-                        text: invoice.owner_name ? `Auth. Signatory: \n\n${invoice.owner_name}` : '',
-                        bold: true,
-                        fontSize: 9,
+                        stack: [
+                            { text: 'Auth. Signatory:', bold: true, fontSize: 9, color: '#475569', margin: [0, 0, 0, signatureBase64 ? 2 : 15] },
+                            ...(signatureBase64 ? [{ image: signatureBase64, width: 80, height: 40, fit: [80, 40], alignment: 'right', margin: [0, 0, 0, 2] }] : []),
+                            { text: invoice.owner_name || '', bold: true, fontSize: 9, color: '#475569' }
+                        ],
                         alignment: 'right',
-                        margin: [0, 10, 40, 0],
-                        color: '#475569'
+                        margin: [0, 10, 40, 0]
                     }
                 ]
             };

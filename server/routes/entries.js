@@ -64,8 +64,8 @@ router.post('/', (req, res) => {
       has_challan, challan_number, has_vehicle, vehicle_number,
       entry_type, unit, length, width, gsm, packaging, no_of_packets,
       weight, rate_per_kg, no_of_bundles, rate_per_bundle,
-      amount, has_loading_charges, loading_charges, total_amount)
-    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+      amount, has_loading_charges, loading_charges, total_amount, is_paid)
+    VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
   `).run(
         d.client_id, d.date, d.from_location || '', d.to_location || '',
         d.has_challan ? 1 : 0, d.challan_number || '',
@@ -74,7 +74,7 @@ router.post('/', (req, res) => {
         d.gsm || 0, d.packaging || 0, d.no_of_packets || 0,
         weight, d.rate_per_kg || 0,
         d.no_of_bundles || 0, d.rate_per_bundle || 0,
-        amount, d.has_loading_charges ? 1 : 0, loadingCharges, totalAmount
+        amount, d.has_loading_charges ? 1 : 0, loadingCharges, totalAmount, d.is_paid ? 1 : 0
     );
 
     const entry = db.prepare(`
@@ -101,7 +101,7 @@ router.put('/:id', (req, res) => {
       has_challan=?, challan_number=?, has_vehicle=?, vehicle_number=?,
       entry_type=?, unit=?, length=?, width=?, gsm=?, packaging=?, no_of_packets=?,
       weight=?, rate_per_kg=?, no_of_bundles=?, rate_per_bundle=?,
-      amount=?, has_loading_charges=?, loading_charges=?, total_amount=?
+      amount=?, has_loading_charges=?, loading_charges=?, total_amount=?, is_paid=?
     WHERE id=?
   `).run(
         d.client_id, d.date, d.from_location || '', d.to_location || '',
@@ -111,7 +111,7 @@ router.put('/:id', (req, res) => {
         d.gsm || 0, d.packaging || 0, d.no_of_packets || 0,
         weight, d.rate_per_kg || 0,
         d.no_of_bundles || 0, d.rate_per_bundle || 0,
-        amount, d.has_loading_charges ? 1 : 0, loadingCharges, totalAmount,
+        amount, d.has_loading_charges ? 1 : 0, loadingCharges, totalAmount, d.is_paid ? 1 : 0,
         req.params.id
     );
 

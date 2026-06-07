@@ -6,7 +6,7 @@ const router = Router();
 // GET all clients (with contacts and company name)
 router.get('/', (req, res) => {
     const clients = db.prepare(`
-    SELECT c.*, co.name as company_name, co.address as company_address, co.phone as company_phone, co.owner_name, co.pan_id 
+    SELECT c.*, co.name as company_name, co.address as company_address, co.phone as company_phone, co.owner_name, co.pan_id, co.signature_path as company_signature_path 
     FROM clients c 
     JOIN companies co ON c.company_id = co.id 
     ORDER BY c.name
@@ -41,15 +41,15 @@ router.get('/:id', (req, res) => {
 
 // POST create client
 router.post('/', (req, res) => {
-    const { name, address, company_id, invoice_visible_columns, contacts } = req.body;
+    const { name, address, company_id, invoice_visible_columns, contacts, default_entry_type, default_rate, default_from_location, default_to_location } = req.body;
     if (!name || !company_id) {
         return res.status(400).json({ error: 'Client Name and Company are required' });
     }
 
     const txn = db.transaction(() => {
         const result = db.prepare(
-            'INSERT INTO clients (name, address, company_id, invoice_visible_columns) VALUES (?, ?, ?, ?)'
-        ).run(name, address || '', company_id, invoice_visible_columns ? JSON.stringify(invoice_visible_columns) : '[]');
+            'INSERT INTO clients (name, address, company_id, invoice_visible_columns, default_entry_type, default_rate, default_from_location, default_to_location) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
+        ).run(name, address || '', company_id, invoice_visible_columns ? JSON.stringify(invoice_visible_columns) : '[]', default_entry_type || '', default_rate != null ? default_rate : null, default_from_location || '', default_to_location || '');
 
         const clientId = result.lastInsertRowid;
 
@@ -77,14 +77,14 @@ router.post('/', (req, res) => {
 
 // PUT update client
 router.put('/:id', (req, res) => {
-    const { name, address, company_id, invoice_visible_columns, contacts } = req.body;
+    const { name, address, company_id, invoice_visible_columns, contacts, default_entry_type, default_rate, default_from_location, default_to_location } = req.body;
     if (!name || !company_id) {
         return res.status(400).json({ error: 'Client Name and Company are required' });
     }
 
     const txn = db.transaction(() => {
-        db.prepare('UPDATE clients SET name=?, address=?, company_id=?, invoice_visible_columns=? WHERE id=?')
-            .run(name, address || '', company_id, invoice_visible_columns ? JSON.stringify(invoice_visible_columns) : '[]', req.params.id);
+        db.prepare('UPDATE clients SET name=?, address=?, company_id=?, invoice_visible_columns=?, default_entry_type=?, default_rate=?, default_from_location=?, default_to_location=? WHERE id=?')
+            .run(name, address || '', company_id, invoice_visible_columns ? JSON.stringify(invoice_visible_columns) : '[]', default_entry_type || '', default_rate != null ? default_rate : null, default_from_location || '', default_to_location || '', req.params.id);
 
         // Replace contacts
         db.prepare('DELETE FROM contact_persons WHERE client_id = ?').run(req.params.id);

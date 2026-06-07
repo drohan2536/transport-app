@@ -3,8 +3,11 @@ import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
 
 const emptyContact = { name: '', phone: '', email: '' }; // Default columns to match Dashboard.jsx logic
-const defaultColumns = ['date', 'from_location', 'to_location', 'entry_type', 'challan_number', 'vehicle_number', 'amount', 'loading_charges', 'total_amount'];
-const emptyClient = { name: '', address: '', company_id: '', invoice_visible_columns: defaultColumns, contacts: [{ ...emptyContact }] };
+const defaultColumns = ['date', 'from_location', 'to_location', 'entry_type', 'challan_number', 'vehicle_number', 'weight', 'no_of_bundles', 'amount', 'loading_charges', 'total_amount'];
+const emptyClient = { name: '', address: '', company_id: '', invoice_visible_columns: defaultColumns, contacts: [{ ...emptyContact }], default_entry_type: '', default_rate: '', default_from_location: '', default_to_location: '' };
+
+// Columns that are always enabled and cannot be unchecked
+const ALWAYS_ON_COLUMNS = ['weight', 'no_of_bundles'];
 
 const INVOICE_COLUMNS = [
     { id: 'date', label: 'Date' },
@@ -56,7 +59,7 @@ export default function Clients() {
 
     const openAdd = () => {
         setEditing(null);
-        setForm({ ...emptyClient, company_id: companies[0]?.id || '', invoice_visible_columns: defaultColumns, contacts: [{ ...emptyContact }] });
+        setForm({ ...emptyClient, company_id: companies[0]?.id || '', invoice_visible_columns: defaultColumns, contacts: [{ ...emptyContact }], default_entry_type: '', default_rate: '', default_from_location: '', default_to_location: '' });
         setShowModal(true);
     };
 
@@ -70,7 +73,11 @@ export default function Clients() {
             address: c.address,
             company_id: c.company_id,
             invoice_visible_columns: visibleCols,
-            contacts: c.contacts.length > 0 ? c.contacts.map(cp => ({ name: cp.name, phone: cp.phone, email: cp.email })) : [{ ...emptyContact }]
+            contacts: c.contacts.length > 0 ? c.contacts.map(cp => ({ name: cp.name, phone: cp.phone, email: cp.email })) : [{ ...emptyContact }],
+            default_entry_type: c.default_entry_type || '',
+            default_rate: c.default_rate != null ? c.default_rate : '',
+            default_from_location: c.default_from_location || '',
+            default_to_location: c.default_to_location || ''
         });
         setShowModal(true);
     };
@@ -82,7 +89,11 @@ export default function Clients() {
             return;
         }
         try {
-            const data = { ...form, contacts: form.contacts.filter(c => c.name || c.phone || c.email) };
+            // Ensure weight and no_of_bundles are always included
+            let cols = form.invoice_visible_columns || [];
+            if (!cols.includes('weight')) cols = [...cols, 'weight'];
+            if (!cols.includes('no_of_bundles')) cols = [...cols, 'no_of_bundles'];
+            const data = { ...form, invoice_visible_columns: cols, contacts: form.contacts.filter(c => c.name || c.phone || c.email) };
             if (editing) {
                 await api.updateClient(editing.id, data);
                 showToast('Client updated');
@@ -107,6 +118,8 @@ export default function Clients() {
     const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
     const toggleColumn = (colId) => {
+        // weight and no_of_bundles are always on — cannot be toggled off
+        if (ALWAYS_ON_COLUMNS.includes(colId)) return;
         setForm(prev => {
             const current = prev.invoice_visible_columns || [];
             if (current.includes(colId)) return { ...prev, invoice_visible_columns: current.filter(c => c !== colId) };
@@ -227,21 +240,54 @@ export default function Clients() {
                                     <textarea className="form-textarea" value={form.address} onChange={e => updateField('address', e.target.value)} placeholder="Full address" />
                                 </div>
 
+                                {/* Default Entry Settings */}
+                                <div style={{ marginTop: 'var(--space-md)', padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                                    <h3 style={{ marginBottom: 'var(--space-sm)', fontSize: '0.95rem' }}>📋 Default Entry Settings <span style={{ fontWeight: 400, fontSize: '0.8rem', color: 'var(--text-muted)' }}>(optional — auto-fills in Daily Entries)</span></h3>
+                                    <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                                        <div className="form-group">
+                                            <label className="form-label">Default Entry Type</label>
+                                            <select className="form-select" value={form.default_entry_type} onChange={e => updateField('default_entry_type', e.target.value)}>
+                                                <option value="">None</option>
+                                                <option value="per_kg">Per Kg</option>
+                                                <option value="per_bundle">Per Bundle</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Default Rate (₹)</label>
+                                            <input className="form-input" type="number" step="any" value={form.default_rate} onChange={e => updateField('default_rate', e.target.value)} placeholder="e.g. 3.50" />
+                                        </div>
+                                    </div>
+                                    <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr' }}>
+                                        <div className="form-group">
+                                            <label className="form-label">Default From Location</label>
+                                            <input className="form-input" value={form.default_from_location} onChange={e => updateField('default_from_location', e.target.value)} placeholder="e.g. Warehouse A" />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label">Default To Location</label>
+                                            <input className="form-input" value={form.default_to_location} onChange={e => updateField('default_to_location', e.target.value)} placeholder="e.g. Factory B" />
+                                        </div>
+                                    </div>
+                                </div>
+
                                 <div className="form-group">
                                     <label className="form-label">Invoice Visible Columns</label>
                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', background: 'var(--bg-secondary)', padding: '10px', borderRadius: 'var(--radius-sm)' }}>
-                                        {INVOICE_COLUMNS.map(col => (
-                                            <label key={col.id} className="form-check">
-                                                <input
-                                                    type="checkbox"
-                                                    checked={(form.invoice_visible_columns || []).includes(col.id)}
-                                                    onChange={() => toggleColumn(col.id)}
-                                                />
-                                                <span>{col.label}</span>
-                                            </label>
-                                        ))}
+                                        {INVOICE_COLUMNS.map(col => {
+                                            const isAlwaysOn = ALWAYS_ON_COLUMNS.includes(col.id);
+                                            return (
+                                                <label key={col.id} className="form-check" style={isAlwaysOn ? { opacity: 0.6, cursor: 'not-allowed' } : {}}>
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isAlwaysOn || (form.invoice_visible_columns || []).includes(col.id)}
+                                                        onChange={() => toggleColumn(col.id)}
+                                                        disabled={isAlwaysOn}
+                                                    />
+                                                    <span>{col.label}{isAlwaysOn ? ' (always on)' : ''}</span>
+                                                </label>
+                                            );
+                                        })}
                                     </div>
-                                    <div className="form-hint">Selected columns will appear on the generated invoice PDF for this client.</div>
+                                    <div className="form-hint">Selected columns will appear on the generated invoice PDF for this client. "Weight" and "No of Bundle" are always enabled and merged into a single column.</div>
                                 </div>
 
                                 {/* Contact Persons */}

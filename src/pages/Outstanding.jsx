@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
+import { formatUI } from '../utils/dateUtils.js';
 
 const DATE_PRESETS = [
     { label: '1 Week', days: 7 },
@@ -25,7 +26,7 @@ function formatCurrency(amount) {
 
 export default function Outstanding() {
     const showToast = useToast();
-    const [activePreset, setActivePreset] = useState(2); // default: 1 Month
+    const [activePreset, setActivePreset] = useState(null); // no preset by default, will use oldest date
     const [fromDate, setFromDate] = useState('');
     const [toDate, setToDate] = useState('');
     const [results, setResults] = useState([]);
@@ -34,10 +35,39 @@ export default function Outstanding() {
     const [expandedClient, setExpandedClient] = useState(null);
     const [clientEntries, setClientEntries] = useState([]);
     const [loadingDetail, setLoadingDetail] = useState(false);
+    const [paymentFilter, setPaymentFilter] = useState('unpaid'); // 'all', 'paid', 'unpaid'
 
-    // Initialize with 1 Month preset
+    // Bulk selection state
+    const [selectedEntries, setSelectedEntries] = useState(new Set());
+    const [bulkProcessing, setBulkProcessing] = useState(false);
+
+    // Initialize: fetch oldest unpaid date for from-date, set to-date to today
     useEffect(() => {
-        applyPreset(2);
+        const init = async () => {
+            try {
+                const data = await api.getOldestUnpaidDate();
+                const today = new Date();
+                setToDate(formatDate(today));
+                if (data.oldest_date) {
+                    setFromDate(data.oldest_date);
+                } else {
+                    // Fallback to 1 month ago
+                    const from = new Date(today);
+                    from.setDate(today.getDate() - 30);
+                    setFromDate(formatDate(from));
+                    setActivePreset(2);
+                }
+            } catch (e) {
+                // Fallback to 1 month ago
+                const today = new Date();
+                const from = new Date(today);
+                from.setDate(today.getDate() - 30);
+                setFromDate(formatDate(from));
+                setToDate(formatDate(today));
+                setActivePreset(2);
+            }
+        };
+        init();
     }, []);
 
     const applyPreset = (index) => {
@@ -50,20 +80,21 @@ export default function Outstanding() {
         setToDate(formatDate(today));
     };
 
-    // Auto-fetch when dates change
+    // Auto-fetch when dates or payment filter change
     useEffect(() => {
         if (fromDate && toDate) {
             fetchOutstanding();
         }
-    }, [fromDate, toDate]);
+    }, [fromDate, toDate, paymentFilter]);
 
     const fetchOutstanding = async () => {
         if (!fromDate || !toDate) return;
         setLoading(true);
         setExpandedClient(null);
         setClientEntries([]);
+        setSelectedEntries(new Set());
         try {
-            const data = await api.getOutstanding(fromDate, toDate);
+            const data = await api.getOutstanding(fromDate, toDate, paymentFilter);
             setResults(data.results || []);
             setSummary(data.summary || { total_clients: 0, total_entries: 0, total_outstanding: 0, total_paid: 0, total_unpaid: 0 });
         } catch (e) {
@@ -76,12 +107,14 @@ export default function Outstanding() {
         if (expandedClient === clientId) {
             setExpandedClient(null);
             setClientEntries([]);
+            setSelectedEntries(new Set());
             return;
         }
         setExpandedClient(clientId);
         setLoadingDetail(true);
+        setSelectedEntries(new Set());
         try {
-            const entries = await api.getOutstandingDetail(clientId, fromDate, toDate);
+            const entries = await api.getOutstandingDetail(clientId, fromDate, toDate, paymentFilter);
             setClientEntries(entries);
         } catch (e) {
             showToast(e.message, 'error');
@@ -89,12 +122,77 @@ export default function Outstanding() {
         setLoadingDetail(false);
     };
 
+    const toggleEntryPaidStatus = async (entryId, e) => {
+        if (e) e.stopPropagation();
+        try {
+            await api.toggleEntryPaid(entryId);
+            showToast('Payment status updated', 'success');
+            // Refresh detailed list and main list
+            fetchOutstanding();
+            if (expandedClient) {
+                const entries = await api.getOutstandingDetail(expandedClient, fromDate, toDate, paymentFilter);
+                setClientEntries(entries);
+            }
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    };
+
     const handleCustomDate = () => {
         setActivePreset(null);
     };
 
+    // Bulk selection handlers
+    const toggleEntrySelection = (entryId, e) => {
+        if (e) e.stopPropagation();
+        setSelectedEntries(prev => {
+            const newSet = new Set(prev);
+            if (newSet.has(entryId)) {
+                newSet.delete(entryId);
+            } else {
+                newSet.add(entryId);
+            }
+            return newSet;
+        });
+    };
+
+    const toggleSelectAll = () => {
+        // Only select unpaid entries (those that can be marked as paid)
+        const unpaidEntries = clientEntries.filter(entry =>
+            entry.invoice_status !== 'paid' && entry.is_paid !== 1
+        );
+        if (selectedEntries.size === unpaidEntries.length && unpaidEntries.length > 0) {
+            setSelectedEntries(new Set());
+        } else {
+            setSelectedEntries(new Set(unpaidEntries.map(e => e.id)));
+        }
+    };
+
+    const handleBulkMarkPaid = async () => {
+        if (selectedEntries.size === 0) return;
+        setBulkProcessing(true);
+        try {
+            await api.bulkMarkPaid(Array.from(selectedEntries));
+            showToast(`${selectedEntries.size} entries marked as paid`, 'success');
+            setSelectedEntries(new Set());
+            fetchOutstanding();
+            if (expandedClient) {
+                const entries = await api.getOutstandingDetail(expandedClient, fromDate, toDate, paymentFilter);
+                setClientEntries(entries);
+            }
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+        setBulkProcessing(false);
+    };
+
     // Calculate the percentage for the bar visualization
     const maxAmount = results.length > 0 ? Math.max(...results.map(r => r.total_amount || 0)) : 1;
+
+    // Count unpaid entries in current detail view for select-all checkbox
+    const unpaidDetailEntries = clientEntries.filter(entry =>
+        entry.invoice_status !== 'paid' && entry.is_paid !== 1
+    );
 
     return (
         <div>
@@ -102,20 +200,40 @@ export default function Outstanding() {
                 <h1><span className="page-header-icon">💰</span> Outstanding</h1>
             </div>
 
-            {/* Date Range Controls */}
+            {/* Date Range Controls + Payment Filter */}
             <div className="card" style={{ marginBottom: '1.5rem' }}>
-                <div style={{ marginBottom: '1rem' }}>
-                    <label className="form-label" style={{ marginBottom: '0.75rem', display: 'block' }}>Quick Date Range</label>
-                    <div className="outstanding-presets">
-                        {DATE_PRESETS.map((preset, idx) => (
-                            <button
-                                key={idx}
-                                className={`outstanding-preset-btn ${activePreset === idx ? 'active' : ''}`}
-                                onClick={() => applyPreset(idx)}
-                            >
-                                {preset.label}
-                            </button>
-                        ))}
+                {/* Payment Filter Dropdown */}
+                <div style={{ display: 'flex', gap: '1rem', alignItems: 'end', marginBottom: '1rem', flexWrap: 'wrap' }}>
+                    <div style={{ flex: '0 0 180px' }}>
+                        <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Payment Status</label>
+                        <select
+                            className="form-select"
+                            value={paymentFilter}
+                            onChange={e => setPaymentFilter(e.target.value)}
+                            style={{
+                                fontWeight: 600,
+                                color: paymentFilter === 'unpaid' ? 'var(--danger)' : paymentFilter === 'paid' ? '#22c55e' : 'var(--text-primary)',
+                                borderColor: paymentFilter === 'unpaid' ? 'var(--danger)' : paymentFilter === 'paid' ? '#22c55e' : 'var(--border-color)',
+                            }}
+                        >
+                            <option value="unpaid">⏳ Unpaid</option>
+                            <option value="paid">✅ Paid</option>
+                            <option value="all">📋 All</option>
+                        </select>
+                    </div>
+                    <div style={{ flex: 1 }}>
+                        <label className="form-label" style={{ marginBottom: '0.5rem', display: 'block' }}>Quick Date Range</label>
+                        <div className="outstanding-presets">
+                            {DATE_PRESETS.map((preset, idx) => (
+                                <button
+                                    key={idx}
+                                    className={`outstanding-preset-btn ${activePreset === idx ? 'active' : ''}`}
+                                    onClick={() => applyPreset(idx)}
+                                >
+                                    {preset.label}
+                                </button>
+                            ))}
+                        </div>
                     </div>
                 </div>
 
@@ -193,7 +311,7 @@ export default function Outstanding() {
                     <div className="empty-state-icon">🎉</div>
                     <p>No entries found for the selected date range.</p>
                     <p style={{ fontSize: '0.82rem', marginTop: '0.5rem', color: 'var(--text-muted)' }}>
-                        Try changing the date range.
+                        Try changing the date range or payment filter.
                     </p>
                 </div>
             ) : (
@@ -257,48 +375,131 @@ export default function Outstanding() {
                                             No entries found.
                                         </div>
                                     ) : (
-                                        <table className="outstanding-detail-table">
-                                            <thead>
-                                                <tr>
-                                                    <th>Date</th>
-                                                    <th>From</th>
-                                                    <th>To</th>
-                                                    <th>Weight / Bundles</th>
-                                                    <th className="text-right">Amount</th>
-                                                    <th>Invoice</th>
-                                                    <th>Status</th>
-                                                </tr>
-                                            </thead>
-                                            <tbody>
-                                                {clientEntries.map(entry => (
-                                                    <tr key={entry.id}>
-                                                        <td className="font-mono">{entry.date}</td>
-                                                        <td>{entry.from_location || '—'}</td>
-                                                        <td>{entry.to_location || '—'}</td>
-                                                        <td>
-                                                            {entry.entry_type === 'per_kg'
-                                                                ? (entry.weight ? `${entry.weight} Kg` : '—')
-                                                                : (entry.no_of_bundles ? `${entry.no_of_bundles} Bundles` : '—')}
-                                                        </td>
-                                                        <td className="text-right font-mono" style={{ fontWeight: 600 }}>
-                                                            {formatCurrency(entry.total_amount)}
-                                                        </td>
-                                                        <td>
-                                                            {entry.invoice_number
-                                                                ? <span className="badge badge-success">{entry.invoice_number}</span>
-                                                                : <span className="badge badge-warning">Not Invoiced</span>
-                                                            }
-                                                        </td>
-                                                        <td>
-                                                            {entry.invoice_status === 'paid'
-                                                                ? <span className="badge badge-success">Paid</span>
-                                                                : <span className="badge badge-danger">Unpaid</span>
-                                                            }
-                                                        </td>
+                                        <>
+                                            {/* Bulk Actions Bar */}
+                                            {unpaidDetailEntries.length > 0 && (
+                                                <div style={{
+                                                    display: 'flex',
+                                                    alignItems: 'center',
+                                                    justifyContent: 'space-between',
+                                                    padding: '0.75rem 1rem',
+                                                    background: selectedEntries.size > 0
+                                                        ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.08) 0%, rgba(34, 197, 94, 0.04) 100%)'
+                                                        : 'var(--bg-secondary)',
+                                                    borderBottom: '1px solid var(--border-color)',
+                                                    borderRadius: '8px 8px 0 0',
+                                                    transition: 'background 0.2s ease',
+                                                }}>
+                                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                                                        <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', cursor: 'pointer', fontSize: '0.85rem', fontWeight: 500 }}>
+                                                            <input
+                                                                type="checkbox"
+                                                                checked={selectedEntries.size === unpaidDetailEntries.length && unpaidDetailEntries.length > 0}
+                                                                onChange={toggleSelectAll}
+                                                                style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                                            />
+                                                            Select All Unpaid ({unpaidDetailEntries.length})
+                                                        </label>
+                                                        {selectedEntries.size > 0 && (
+                                                            <span style={{ fontSize: '0.82rem', color: 'var(--text-secondary)' }}>
+                                                                {selectedEntries.size} selected
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                    {selectedEntries.size > 0 && (
+                                                        <button
+                                                            className="btn btn-primary btn-sm"
+                                                            onClick={handleBulkMarkPaid}
+                                                            disabled={bulkProcessing}
+                                                            style={{
+                                                                display: 'flex',
+                                                                alignItems: 'center',
+                                                                gap: '0.4rem',
+                                                                animation: 'fadeIn 0.2s ease',
+                                                            }}
+                                                        >
+                                                            {bulkProcessing ? (
+                                                                <span className="spinner" style={{ width: 14, height: 14 }}></span>
+                                                            ) : (
+                                                                <>✅ Mark {selectedEntries.size} as Paid</>
+                                                            )}
+                                                        </button>
+                                                    )}
+                                                </div>
+                                            )}
+                                            <table className="outstanding-detail-table">
+                                                <thead>
+                                                    <tr>
+                                                        <th style={{ width: '40px' }}></th>
+                                                        <th>Date</th>
+                                                        <th>From</th>
+                                                        <th>To</th>
+                                                        <th>Weight / Bundles</th>
+                                                        <th className="text-right">Amount</th>
+                                                        <th>Invoice</th>
+                                                        <th>Status</th>
+                                                        <th>Actions</th>
                                                     </tr>
-                                                ))}
-                                            </tbody>
-                                        </table>
+                                                </thead>
+                                                <tbody>
+                                                    {clientEntries.map(entry => {
+                                                        const isPaid = entry.invoice_status === 'paid' || entry.is_paid === 1;
+                                                        const canSelect = !isPaid;
+                                                        return (
+                                                            <tr key={entry.id} style={{
+                                                                background: selectedEntries.has(entry.id) ? 'rgba(34, 197, 94, 0.06)' : 'transparent',
+                                                                transition: 'background 0.15s ease',
+                                                            }}>
+                                                                <td>
+                                                                    {canSelect && (
+                                                                        <input
+                                                                            type="checkbox"
+                                                                            checked={selectedEntries.has(entry.id)}
+                                                                            onChange={(e) => toggleEntrySelection(entry.id, e)}
+                                                                            style={{ width: '16px', height: '16px', cursor: 'pointer' }}
+                                                                        />
+                                                                    )}
+                                                                </td>
+                                                                <td className="font-mono">{formatUI(entry.date)}</td>
+                                                                <td>{entry.from_location || '—'}</td>
+                                                                <td>{entry.to_location || '—'}</td>
+                                                                <td>
+                                                                    {entry.entry_type === 'per_kg'
+                                                                        ? (entry.weight ? `${entry.weight} Kg` : '—')
+                                                                        : (entry.no_of_bundles ? `${entry.no_of_bundles} Bundles` : '—')}
+                                                                </td>
+                                                                <td className="text-right font-mono" style={{ fontWeight: 600 }}>
+                                                                    {formatCurrency(entry.total_amount)}
+                                                                </td>
+                                                                <td>
+                                                                    {entry.invoice_number
+                                                                        ? <span className="badge badge-success">{entry.invoice_number}</span>
+                                                                        : <span className="badge badge-warning">Not Invoiced</span>
+                                                                    }
+                                                                </td>
+                                                                <td>
+                                                                    {isPaid
+                                                                        ? <span className="badge badge-success">Paid</span>
+                                                                        : <span className="badge badge-danger">Unpaid</span>
+                                                                    }
+                                                                </td>
+                                                                <td>
+                                                                    {(entry.invoice_status !== 'paid') && (
+                                                                        <button 
+                                                                            className="btn btn-ghost btn-sm" 
+                                                                            onClick={(e) => toggleEntryPaidStatus(entry.id, e)}
+                                                                            title={entry.is_paid === 1 ? 'Mark Unpaid' : 'Mark Paid directly'}
+                                                                        >
+                                                                            {entry.is_paid === 1 ? '❌ Unmark' : '✅ Mark Paid'}
+                                                                        </button>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </>
                                     )}
                                 </div>
                             )}

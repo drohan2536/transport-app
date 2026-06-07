@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
-import { buildPdfDefinition, loadLogoBase64, pdfMake } from '../utils/pdfGenerator.js';
+import { buildPdfDefinition, loadCompanyLogoBase64, loadCompanySignatureBase64, pdfMake } from '../utils/pdfGenerator.js';
+import { formatUI } from '../utils/dateUtils.js';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 
 export default function Invoicing() {
     const showToast = useToast();
@@ -25,6 +27,32 @@ export default function Invoicing() {
     useEffect(() => {
         api.getClients().then(setClients).catch(e => showToast(e.message, 'error'));
     }, []);
+
+    useEffect(() => {
+        if (clientId) {
+            api.getEntries({ client_id: clientId, uninvoiced: '1' })
+                .then(ents => {
+                    if (ents && ents.length > 0) {
+                        const dates = ents.map(e => e.date).filter(Boolean).sort();
+                        if (dates.length > 0) {
+                            setFromDate(dates[0]);
+                            setToDate(dates[dates.length - 1]);
+                            return;
+                        }
+                    }
+                    setFromDate('');
+                    setToDate('');
+                })
+                .catch(e => {
+                    console.error("Error fetching dates for client:", e);
+                    setFromDate('');
+                    setToDate('');
+                });
+        } else {
+            setFromDate('');
+            setToDate('');
+        }
+    }, [clientId]);
 
     const fetchEntries = async () => {
         if (!clientId || !fromDate || !toDate) {
@@ -114,20 +142,7 @@ export default function Invoicing() {
             const newInvoice = await api.createInvoice(invoicePayload);
             showToast('Invoice created successfully! 🎉');
 
-            const docDef = buildPdfDefinition(newInvoice, logoBase64);
-            pdfMake.createPdf(docDef).getBlob((blob) => {
-                const url = URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `Invoice_${newInvoice.invoice_number}.pdf`;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    URL.revokeObjectURL(url);
-                }, 1000);
-                showToast('PDF downloaded automatically');
-            });
+            // PDF auto-download has been removed as requested.
 
             setShowPreview(false);
             setEntries([]);
@@ -154,10 +169,13 @@ export default function Invoicing() {
                         <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr 1fr' }}>
                             <div className="form-group">
                                 <label className="form-label required">Client</label>
-                                <select className="form-select" value={clientId} onChange={e => setClientId(e.target.value)}>
-                                    <option value="">Select client…</option>
-                                    {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                </select>
+                                <SearchableSelect 
+                                    options={clients} 
+                                    value={clientId} 
+                                    onChange={setClientId} 
+                                    placeholder="Select client…"
+                                    required
+                                />
                             </div>
                             <div className="form-group">
                                 <label className="form-label required">From Date</label>
@@ -189,34 +207,77 @@ export default function Invoicing() {
                                 </div>
                             </div>
                             <div className="table-container">
-                                <table>
-                                    <thead>
-                                        <tr>
-                                            <th><input type="checkbox" checked={selectedEntryIds.length === entries.length} onChange={toggleAll} /></th>
-                                            <th>Date</th>
-                                            <th>Route</th>
-                                            <th>Type</th>
-                                            <th>Challan</th>
-                                            <th className="text-right">Amount</th>
-                                            <th className="text-right">Charges</th>
-                                            <th className="text-right">Total</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody>
-                                        {entries.map(e => (
-                                            <tr key={e.id} style={{ opacity: selectedEntryIds.includes(e.id) ? 1 : 0.5 }}>
-                                                <td><input type="checkbox" checked={selectedEntryIds.includes(e.id)} onChange={() => toggleEntry(e.id)} /></td>
-                                                <td className="font-mono">{e.date}</td>
-                                                <td>{e.from_location && e.to_location ? `${e.from_location} → ${e.to_location}` : '—'}</td>
-                                                <td><span className="badge badge-info">{e.entry_type === 'per_kg' ? 'Per Kg' : 'Per Bundle'}</span></td>
-                                                <td>{e.has_challan ? e.challan_number : '—'}</td>
-                                                <td className="text-right font-mono">₹{(e.amount || 0).toFixed(2)}</td>
-                                                <td className="text-right font-mono">{e.loading_charges > 0 ? `₹${e.loading_charges.toFixed(2)}` : '—'}</td>
-                                                <td className="text-right font-mono" style={{ fontWeight: 600 }}>₹{(e.total_amount || 0).toFixed(2)}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+                                {(() => {
+                                    const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
+                                    let cols = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'weight', 'no_of_bundles', 'amount'];
+                                    
+                                    // Merge weight and no_of_bundles into a single column
+                                    const hasBothWtBdl = cols.includes('weight') && cols.includes('no_of_bundles');
+                                    if (hasBothWtBdl) {
+                                        // Replace first occurrence (weight) with merged column, remove no_of_bundles
+                                        cols = cols.map(c => c === 'weight' ? '_wt_bdl_merged' : c).filter(c => c !== 'no_of_bundles');
+                                    }
+
+                                    const labelMap = {
+                                        date: 'Date', from_location: 'From', to_location: 'To', entry_type: 'Type',
+                                        challan_number: 'Challan', vehicle_number: 'Vehicle',
+                                        amount: 'Amount', loading_charges: 'Loading', total_amount: 'Total',
+                                        unit: 'Unit', length: 'L', width: 'W', gsm: 'GSM', packaging: 'Pkg',
+                                        no_of_packets: 'Pkt', weight: 'Weight', rate_per_kg: 'Rate/Kg',
+                                        no_of_bundles: 'Bundles', rate_per_bundle: 'Rate/Bdl',
+                                        _wt_bdl_merged: 'Total Wt / Bundles'
+                                    };
+                                    const rightAlign = ['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle', '_wt_bdl_merged'];
+
+                                    const getCellValue = (e, colId) => {
+                                        if (colId === '_wt_bdl_merged') {
+                                            if (e.weight && e.no_of_bundles) return `${e.weight} Kg / ${e.no_of_bundles} Bundles`;
+                                            if (e.weight) return `${e.weight} Kg`;
+                                            if (e.no_of_bundles) return `${e.no_of_bundles} Bundles`;
+                                            return '—';
+                                        }
+                                        if (colId === 'entry_type') return e.entry_type === 'per_kg' ? 'Kg' : 'Bundle';
+                                        if (colId === 'date') return formatUI(e.date);
+                                        if (colId === 'challan_number') return e.has_challan ? e.challan_number : '—';
+                                        if (colId === 'vehicle_number') return e.has_vehicle ? e.vehicle_number : '—';
+                                        if (colId === 'weight') return e.weight ? `${e.weight} Kg` : '—';
+                                        if (colId === 'no_of_bundles') return e.no_of_bundles ? `${e.no_of_bundles} Bdl` : '—';
+                                        if (['amount', 'loading_charges', 'total_amount'].includes(colId)) return `₹${(e[colId] || 0).toFixed(2)}`;
+                                        if (['rate_per_kg', 'rate_per_bundle'].includes(colId)) return e[colId] || 0;
+                                        const val = e[colId];
+                                        return val !== undefined && val !== null && val !== '' ? val : '—';
+                                    };
+
+                                    return (
+                                        <table>
+                                            <thead>
+                                                <tr>
+                                                    <th><input type="checkbox" checked={selectedEntryIds.length === entries.length} onChange={toggleAll} /></th>
+                                                    {cols.map(colId => (
+                                                        <th key={colId} className={rightAlign.includes(colId) ? 'text-right' : ''}>
+                                                            {labelMap[colId] || colId}
+                                                        </th>
+                                                    ))}
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {entries.map(e => (
+                                                    <tr key={e.id} style={{ opacity: selectedEntryIds.includes(e.id) ? 1 : 0.5 }}>
+                                                        <td><input type="checkbox" checked={selectedEntryIds.includes(e.id)} onChange={() => toggleEntry(e.id)} /></td>
+                                                        {cols.map(colId => (
+                                                            <td key={colId}
+                                                                className={`${rightAlign.includes(colId) ? 'text-right font-mono' : ''}`}
+                                                                style={{ fontWeight: colId === 'total_amount' ? 600 : 'normal' }}
+                                                            >
+                                                                {getCellValue(e, colId)}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    );
+                                })()}
                             </div>
 
                             {/* Adjustment Section */}
@@ -315,107 +376,124 @@ export default function Invoicing() {
                         </div>
 
                         {/* Bordered Table */}
-                        <table style={{ borderCollapse: 'collapse', width: '100%' }}>
-                            <thead>
-                                <tr>
-                                    <th style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center' }}>Sr. no.</th>
-                                    {(() => {
-                                        const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
-                                        const cols = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'weight', 'amount'];
-                                        const labelMap = {
-                                            date: 'Date', from_location: 'From', to_location: 'To', entry_type: 'Type',
-                                            challan_number: 'Challan', vehicle_number: 'Vehicle',
-                                            amount: 'Amount', loading_charges: 'Loading', total_amount: 'Total',
-                                            unit: 'Unit', length: 'L', width: 'W', gsm: 'GSM', packaging: 'Pkg',
-                                            no_of_packets: 'Pkt', weight: 'Weight', rate_per_kg: 'Rate/Kg',
-                                            no_of_bundles: 'Bundles', rate_per_bundle: 'Rate/Bdl'
-                                        };
-                                        const rightAlign = ['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle'];
-                                        return cols.map(colId => (
-                                            <th key={colId} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: rightAlign.includes(colId) ? 'right' : 'left' }}>
-                                                {labelMap[colId] || colId}
-                                            </th>
-                                        ));
-                                    })()}
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {selectedEntries.map((e, i) => {
-                                    const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
-                                    const cols = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'weight', 'amount'];
-                                    const rightAlign = ['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle'];
-                                    return (
-                                        <tr key={e.id}>
-                                            <td style={{ border: '1px solid #333', padding: '5px 8px', textAlign: 'center' }}>{i + 1}.</td>
-                                            {cols.map(colId => {
-                                                let val = e[colId];
-                                                if (colId === 'entry_type') val = e.entry_type === 'per_kg' ? 'Kg' : 'Bundle';
-                                                else if (colId === 'challan_number') val = e.has_challan ? e.challan_number : '—';
-                                                else if (colId === 'vehicle_number') val = e.has_vehicle ? e.vehicle_number : '—';
-                                                else if (colId === 'weight') val = e.entry_type === 'per_kg' ? (e.weight ? `${e.weight} Kg` : '—') : (e.no_of_bundles ? `${e.no_of_bundles} Bundles` : '—');
-                                                else if (['amount', 'loading_charges', 'total_amount'].includes(colId)) val = `${(e[colId] || 0).toFixed(2)}/-`;
-                                                else if (['rate_per_kg', 'rate_per_bundle'].includes(colId)) val = (e[colId] || 0);
+                        {(() => {
+                            const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
+                            let cols = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'weight', 'no_of_bundles', 'amount'];
+                            
+                            // Merge weight and no_of_bundles into a single column
+                            const hasBothWtBdl = cols.includes('weight') && cols.includes('no_of_bundles');
+                            if (hasBothWtBdl) {
+                                cols = cols.map(c => c === 'weight' ? '_wt_bdl_merged' : c).filter(c => c !== 'no_of_bundles');
+                            }
 
-                                                return (
+                            const labelMap = {
+                                date: 'Date', from_location: 'From', to_location: 'To', entry_type: 'Type',
+                                challan_number: 'Challan', vehicle_number: 'Vehicle',
+                                amount: 'Amount', loading_charges: 'Loading', total_amount: 'Total',
+                                unit: 'Unit', length: 'L', width: 'W', gsm: 'GSM', packaging: 'Pkg',
+                                no_of_packets: 'Pkt', weight: 'Weight', rate_per_kg: 'Rate/Kg',
+                                no_of_bundles: 'Bundles', rate_per_bundle: 'Rate/Bdl',
+                                _wt_bdl_merged: 'Total Wt / Bundles'
+                            };
+                            const rightAlign = ['amount', 'loading_charges', 'total_amount', 'weight', 'rate_per_kg', 'rate_per_bundle', '_wt_bdl_merged'];
+
+                            const getCellVal = (e, colId) => {
+                                if (colId === '_wt_bdl_merged') {
+                                    if (e.weight && e.no_of_bundles) return `${e.weight} Kg / ${e.no_of_bundles} Bundles`;
+                                    if (e.weight) return `${e.weight} Kg`;
+                                    if (e.no_of_bundles) return `${e.no_of_bundles} Bundles`;
+                                    return '—';
+                                }
+                                if (colId === 'entry_type') return e.entry_type === 'per_kg' ? 'Kg' : 'Bundle';
+                                if (colId === 'date') return formatUI(e.date);
+                                if (colId === 'challan_number') return e.has_challan ? e.challan_number : '—';
+                                if (colId === 'vehicle_number') return e.has_vehicle ? e.vehicle_number : '—';
+                                if (colId === 'weight') return e.weight ? `${e.weight} Kg` : '—';
+                                if (colId === 'no_of_bundles') return e.no_of_bundles ? `${e.no_of_bundles} Bdl` : '—';
+                                if (['amount', 'loading_charges', 'total_amount'].includes(colId)) return `${(e[colId] || 0).toFixed(2)}/-`;
+                                if (['rate_per_kg', 'rate_per_bundle'].includes(colId)) return (e[colId] || 0);
+                                const val = e[colId];
+                                return val !== undefined && val !== null && val !== '' ? val : '—';
+                            };
+
+                            return (
+                                <table style={{ borderCollapse: 'collapse', width: '100%' }}>
+                                    <thead>
+                                        <tr>
+                                            <th style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center' }}>Sr. no.</th>
+                                            {cols.map(colId => (
+                                                <th key={colId} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: rightAlign.includes(colId) ? 'right' : 'left' }}>
+                                                    {labelMap[colId] || colId}
+                                                </th>
+                                            ))}
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {selectedEntries.map((e, i) => (
+                                            <tr key={e.id}>
+                                                <td style={{ border: '1px solid #333', padding: '5px 8px', textAlign: 'center' }}>{i + 1}.</td>
+                                                {cols.map(colId => (
                                                     <td key={colId} style={{
                                                         border: '1px solid #333', padding: '5px 8px',
                                                         textAlign: rightAlign.includes(colId) ? 'right' : 'left',
                                                         fontWeight: colId === 'total_amount' ? 600 : 'normal'
                                                     }}>
-                                                        {val !== undefined && val !== null ? val : '—'}
+                                                        {getCellVal(e, colId)}
                                                     </td>
-                                                );
-                                            })}
-                                        </tr>
-                                    );
-                                })}
-                                {/* Total Amount Row */}
-                                {(() => {
-                                    const visibleCols = JSON.parse(client?.invoice_visible_columns || '[]');
-                                    const cols = visibleCols.length > 0 ? visibleCols : ['date', 'from_location', 'to_location', 'weight', 'amount'];
-                                    return (
-                                        <>
-                                            <tr>
-                                                <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
-                                                <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1rem' }}>
-                                                    Total Amount
-                                                </td>
-                                                <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1rem' }}>
-                                                    {totalAmount.toFixed(2)}/-
-                                                </td>
+                                                ))}
                                             </tr>
-                                            {wantsAdjustment && adjustmentType && adjAmountNum > 0 && (
-                                                <>
-                                                    <tr>
-                                                        <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
-                                                        <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 600, fontSize: '0.95rem', color: adjustmentType === 'addition' ? 'var(--success, #16a34a)' : 'var(--error, #dc2626)' }}>
-                                                            {adjustmentType === 'addition' ? 'Adding' : 'Subtracting'} ({adjustmentReason})
-                                                        </td>
-                                                        <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 600, fontSize: '0.95rem', color: adjustmentType === 'addition' ? 'var(--success, #16a34a)' : 'var(--error, #dc2626)' }}>
-                                                            {adjustmentType === 'addition' ? '+' : '−'}{adjAmountNum.toFixed(2)}/-
-                                                        </td>
-                                                    </tr>
-                                                    <tr>
-                                                        <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
-                                                        <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1.05rem' }}>
-                                                            Final Amount
-                                                        </td>
-                                                        <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1.05rem' }}>
-                                                            {computedFinalAmount.toFixed(2)}/-
-                                                        </td>
-                                                    </tr>
-                                                </>
-                                            )}
-                                        </>
-                                    );
-                                })()}
-                            </tbody>
-                        </table>
+                                        ))}
+                                        {/* Total Amount Row */}
+                                        <tr>
+                                            <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                            <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1rem' }}>
+                                                Total Amount
+                                            </td>
+                                            <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1rem' }}>
+                                                {totalAmount.toFixed(2)}/-
+                                            </td>
+                                        </tr>
+                                        {wantsAdjustment && adjustmentType && adjAmountNum > 0 && (
+                                            <>
+                                                <tr>
+                                                    <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                                    <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 600, fontSize: '0.95rem', color: adjustmentType === 'addition' ? 'var(--success, #16a34a)' : 'var(--error, #dc2626)' }}>
+                                                        {adjustmentType === 'addition' ? 'Adding' : 'Subtracting'} ({adjustmentReason})
+                                                    </td>
+                                                    <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 600, fontSize: '0.95rem', color: adjustmentType === 'addition' ? 'var(--success, #16a34a)' : 'var(--error, #dc2626)' }}>
+                                                        {adjustmentType === 'addition' ? '+' : '−'}{adjAmountNum.toFixed(2)}/-
+                                                    </td>
+                                                </tr>
+                                                <tr>
+                                                    <td style={{ border: '1px solid #333', padding: '6px 8px' }}></td>
+                                                    <td colSpan={cols.length - 1} style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'center', fontWeight: 700, fontSize: '1.05rem' }}>
+                                                        Final Amount
+                                                    </td>
+                                                    <td style={{ border: '1px solid #333', padding: '6px 8px', textAlign: 'right', fontWeight: 700, fontSize: '1.05rem' }}>
+                                                        {computedFinalAmount.toFixed(2)}/-
+                                                    </td>
+                                                </tr>
+                                            </>
+                                        )}
+                                    </tbody>
+                                </table>
+                            );
+                        })()}
+
+
 
                         {/* Footer: PAN + Owner */}
-                        <div className="inv-footer" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+                        <div className="inv-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 20 }}>
                             <div style={{ fontWeight: 600 }}>{client?.pan_id && `PAN NO. :- ${client.pan_id}`}</div>
-                            <div style={{ fontWeight: 600 }}>{client?.owner_name || ''}</div>
+                            <div style={{ textAlign: 'center' }}>
+                                <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, fontSize: '0.85rem' }}>Auth. Signatory:</div>
+                                {client?.company_signature_path ? (
+                                    <img src={`/uploads/${client.company_signature_path.split('/').pop()}`} alt="Owner Signature" style={{ height: 40, objectFit: 'contain', marginBottom: 4 }} />
+                                ) : (
+                                    <div style={{ height: 40 }} />
+                                )}
+                                <div style={{ fontWeight: 600 }}>{client?.owner_name || ''}</div>
+                            </div>
                         </div>
                     </div>
                 </div>

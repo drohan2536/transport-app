@@ -7,7 +7,7 @@ import logo from '../assets/logo.svg';
 const ToastContext = createContext();
 export const useToast = () => useContext(ToastContext);
 
-export default function Layout() {
+export default function Layout({ user, onLogout }) {
     const [toasts, setToasts] = useState([]);
 
     const showToast = useCallback((message, type = 'success') => {
@@ -58,15 +58,41 @@ export default function Layout() {
                             <span className="nav-icon">👷</span> Workers & Salary
                         </NavLink>
 
-                        <div className="sidebar-section">Settings</div>
-                        <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
-                            <span className="nav-icon">⚙️</span> Settings
-                        </NavLink>
+                        {user?.role === 'admin' && (
+                            <>
+                                <div className="sidebar-section">Settings</div>
+                                <NavLink to="/settings" className={({ isActive }) => `nav-link ${isActive ? 'active' : ''}`}>
+                                    <span className="nav-icon">⚙️</span> Settings
+                                </NavLink>
+                            </>
+                        )}
                     </nav>
                 </aside>
-                <main className="main-content">
-                    <Outlet />
-                </main>
+                <div className="main-wrapper">
+                    {/* Top header bar with user info */}
+                    {user && (
+                        <header className="topbar">
+                            <div className="topbar-spacer"></div>
+                            <div className="topbar-user">
+                                <div className="topbar-user-avatar">{user.name?.[0]?.toUpperCase() || '?'}</div>
+                                <div className="topbar-user-details">
+                                    <span className="topbar-user-name">{user.name}</span>
+                                    <span className="topbar-user-role">@{user.username}</span>
+                                </div>
+                                <button className="topbar-logout-btn" onClick={onLogout} title="Logout">
+                                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                                        <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" />
+                                        <polyline points="16 17 21 12 16 7" />
+                                        <line x1="21" y1="12" x2="9" y2="12" />
+                                    </svg>
+                                </button>
+                            </div>
+                        </header>
+                    )}
+                    <main className="main-content">
+                        <Outlet />
+                    </main>
+                </div>
 
                 {/* Toast notifications */}
                 <div className="toast-container">

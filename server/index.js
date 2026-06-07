@@ -15,6 +15,7 @@ import settingsRouter from './routes/settings.js';
 import outstandingRouter from './routes/outstanding.js';
 import workersRouter from './routes/workers.js';
 import scheduledEmailsRouter from './routes/scheduledEmails.js';
+import authRouter from './routes/auth.js';
 import { startExpiryScheduler } from './scheduler.js';
 import { startEmailScheduler } from './emailScheduler.js';
 
@@ -29,6 +30,7 @@ app.use(cors());
 app.use(express.json({ limit: '50mb' }));
 app.use('/uploads', express.static(uploadsDir));
 
+app.use('/api/auth', authRouter);
 app.use('/api/companies', companiesRouter);
 app.use('/api/clients', clientsRouter);
 app.use('/api/entries', entriesRouter);
