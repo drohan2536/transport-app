@@ -23,7 +23,8 @@ const emptyEntry = {
     no_of_bundles: '', rate_per_bundle: '',
     has_loading_charges: false, loading_charges: '',
     amount: '',
-    total_amount: ''
+    total_amount: '',
+    is_paid: false
 };
 
 export default function Entries() {
@@ -199,7 +200,8 @@ export default function Entries() {
             has_loading_charges: !!entry.has_loading_charges,
             loading_charges: entry.loading_charges || '',
             amount: entry.amount || '',
-            total_amount: entry.total_amount || ''
+            total_amount: entry.total_amount || '',
+            is_paid: !!entry.is_paid
         });
         // Populate first sub-entry with saved values
         if (entry.entry_type === 'per_kg') {
@@ -243,7 +245,8 @@ export default function Entries() {
             rate_per_bundle: parseFloat(form.rate_per_bundle) || 0,
             loading_charges: form.has_loading_charges ? (parseFloat(form.loading_charges) || 0) : 0,
             amount: parseFloat(form.amount) || 0,
-            total_amount: parseFloat(form.total_amount) || 0
+            total_amount: parseFloat(form.total_amount) || 0,
+            is_paid: !!form.is_paid
         };
 
         try {
@@ -554,6 +557,15 @@ export default function Entries() {
                                     <div className="form-group">
                                         <label className="form-label" style={{ color: overrides.totalAmount ? 'var(--warning)' : 'var(--accent-primary)' }}>Total Amount {overrides.totalAmount ? '(Manual)' : '(Auto)'}</label>
                                         <input className="form-input" type="number" step="any" value={form.total_amount} onChange={e => { updateField('total_amount', e.target.value); setOverrides(p => ({ ...p, totalAmount: true })); }} style={{ borderColor: overrides.totalAmount ? 'var(--warning)' : 'var(--accent-primary)', fontWeight: 700 }} />
+                                    </div>
+                                </div>
+
+                                <div className="form-row" style={{ gridTemplateColumns: '1fr' }}>
+                                    <div className="form-group">
+                                        <div className="form-check" style={{ marginTop: '10px' }}>
+                                            <input type="checkbox" id="is_paid" checked={form.is_paid} onChange={e => updateField('is_paid', e.target.checked)} />
+                                            <label htmlFor="is_paid" style={{ fontWeight: 'bold', color: 'var(--success)' }}>Mark as Paid (Amount received directly)</label>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

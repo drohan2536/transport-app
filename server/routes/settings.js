@@ -263,32 +263,79 @@ router.post('/restore', upload.single('backup'), (req, res) => {
     }
 });
 
-// POST reset database — deletes the database files and recreates them
+// POST reset database — deletes specified modules or the entire database
 router.post('/reset-database', (req, res) => {
     try {
-        // Create a safety backup of the current DB just in case
-        const backupPath = dbPath + '.pre-reset-backup';
-        if (fs.existsSync(dbPath)) {
-            fs.copyFileSync(dbPath, backupPath);
+        const { modules } = req.body || {};
+
+        if (!modules || modules.length === 0) {
+            return res.status(400).json({ error: 'No modules selected for reset' });
         }
 
-        // CLOSE the database FIRST to release file locks
-        closeDatabase();
+        if (modules.includes('ALL')) {
+            // Full Reset Logic
+            // Create a safety backup of the current DB just in case
+            const backupPath = dbPath + '.pre-reset-backup';
+            if (fs.existsSync(dbPath)) {
+                fs.copyFileSync(dbPath, backupPath);
+            }
 
-        // Delete the database files
-        if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
-        const walPath = dbPath + '-wal';
-        const shmPath = dbPath + '-shm';
-        if (fs.existsSync(walPath)) try { fs.unlinkSync(walPath); } catch (e) { /* ignore */ }
-        if (fs.existsSync(shmPath)) try { fs.unlinkSync(shmPath); } catch (e) { /* ignore */ }
+            // CLOSE the database FIRST to release file locks
+            closeDatabase();
 
-        // Reopen the database, which will recreate the tables
-        reopenDatabase();
+            // Delete the database files
+            if (fs.existsSync(dbPath)) fs.unlinkSync(dbPath);
+            const walPath = dbPath + '-wal';
+            const shmPath = dbPath + '-shm';
+            if (fs.existsSync(walPath)) try { fs.unlinkSync(walPath); } catch (e) { /* ignore */ }
+            if (fs.existsSync(shmPath)) try { fs.unlinkSync(shmPath); } catch (e) { /* ignore */ }
+
+            // Reopen the database, which will recreate the tables
+            reopenDatabase();
+
+            return res.json({
+                message: 'Complete Database reset successfully! All data has been cleared.',
+                restart_required: false
+            });
+        }
+
+        // Selective Module Reset
+        db.transaction(() => {
+            if (modules.includes('companies')) {
+                db.prepare('DELETE FROM invoice_seq_overrides').run();
+                db.prepare('DELETE FROM companies').run();
+            }
+            if (modules.includes('clients')) {
+                db.prepare('DELETE FROM contact_persons').run();
+                db.prepare('DELETE FROM clients').run();
+            }
+            if (modules.includes('vehicles')) {
+                db.prepare('DELETE FROM vehicle_documents').run();
+                db.prepare('DELETE FROM vehicles').run();
+            }
+            if (modules.includes('workers')) {
+                db.prepare('DELETE FROM worker_extra_pay').run();
+                db.prepare('DELETE FROM worker_pay_records').run();
+                db.prepare('DELETE FROM worker_holidays').run();
+                db.prepare('DELETE FROM worker_pending_amounts').run();
+                db.prepare('DELETE FROM worker_advances').run();
+                db.prepare('DELETE FROM worker_attendance').run();
+                db.prepare('DELETE FROM workers').run();
+            }
+            if (modules.includes('entries')) {
+                db.prepare('DELETE FROM entries').run();
+            }
+            if (modules.includes('invoices')) {
+                db.prepare('UPDATE entries SET invoice_id = NULL').run();
+                db.prepare('DELETE FROM invoices').run();
+            }
+        })();
 
         res.json({
-            message: 'Database reset successfully! All data has been cleared.',
+            message: 'Selected modules reset successfully!',
             restart_required: false
         });
+
     } catch (err) {
         console.error('Reset error:', err);
         res.status(500).json({ error: `Reset failed: ${err.message}` });

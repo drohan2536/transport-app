@@ -1,4 +1,5 @@
 import { pdfMake, loadLogoBase64 } from './pdfGenerator.js';
+import { formatUI } from './dateUtils.js';
 
 function fmt(amount) {
     return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(amount || 0);
@@ -22,7 +23,7 @@ export function buildPayslipPdf(data, logoBase64) {
                 width: 'auto',
                 stack: [
                     { text: 'Pay Period', fontSize: 9, bold: true, color: '#64748b', alignment: 'right', margin: [0, 0, 0, 2] },
-                    { text: `${data.from_date} to ${data.to_date}`, fontSize: 11, bold: true, color: '#0f172a', alignment: 'right' }
+                    { text: `${formatUI(data.from_date)} to ${formatUI(data.to_date)}`, fontSize: 11, bold: true, color: '#0f172a', alignment: 'right' }
                 ]
             }
         ],
@@ -115,7 +116,7 @@ export function buildPayslipPdf(data, logoBase64) {
         data.absent_days.forEach((a, i) => {
             absentBody.push([
                 { text: `${i + 1}`, fontSize: 8, alignment: 'center' },
-                { text: a.date, fontSize: 8 },
+                { text: formatUI(a.date), fontSize: 8 },
                 { text: a.remark || '—', fontSize: 8, color: '#64748b' }
             ]);
         });
@@ -172,7 +173,7 @@ export function buildPayslipPdf(data, logoBase64) {
         data.advances.forEach((a, i) => {
             advBody.push([
                 { text: `${i + 1}`, fontSize: 8, alignment: 'center' },
-                { text: a.date, fontSize: 8 },
+                { text: formatUI(a.date), fontSize: 8 },
                 { text: `₹ ${fmt(a.amount)}`, fontSize: 8, alignment: 'right', color: '#dc2626' },
                 { text: a.mode_of_payment || '—', fontSize: 8 },
                 { text: a.paid_by || '—', fontSize: 8 },
@@ -223,7 +224,7 @@ export function buildPayslipPdf(data, logoBase64) {
         data.pendings.forEach((p, i) => {
             penBody.push([
                 { text: `${i + 1}`, fontSize: 8, alignment: 'center' },
-                { text: p.date, fontSize: 8 },
+                { text: formatUI(p.date), fontSize: 8 },
                 { text: `₹ ${fmt(p.amount)}`, fontSize: 8, alignment: 'right', color: '#16a34a' },
                 { text: p.remark || '—', fontSize: 8, color: '#64748b' }
             ]);
@@ -269,7 +270,7 @@ export function buildPayslipPdf(data, logoBase64) {
         data.extra_pay_records.forEach((r, i) => {
             extraBody.push([
                 { text: `${i + 1}`, fontSize: 8, alignment: 'center' },
-                { text: r.date, fontSize: 8 },
+                { text: formatUI(r.date), fontSize: 8 },
                 { text: r.work_description || '—', fontSize: 8, color: '#64748b' },
                 { text: `₹ ${fmt(r.extra_pay)}`, fontSize: 8, alignment: 'right', color: '#d97706' }
             ]);

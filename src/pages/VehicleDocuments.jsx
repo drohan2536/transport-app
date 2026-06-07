@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useToast } from '../components/Layout.jsx';
+import { formatUI } from '../utils/dateUtils.js';
 
 const API_DOCS = 'http://localhost:9090/api/vehicle-docs';
 const API_VEHICLES = 'http://localhost:9090/api/vehicles';
@@ -401,8 +402,8 @@ export default function VehicleDocuments() {
                                                     </td>
                                                     <td style={{ fontWeight: 600, color: 'var(--text-primary)' }}>{doc.doc_name}</td>
                                                     <td><span style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', maxWidth: '130px', overflow: 'hidden', textOverflow: 'ellipsis', display: 'block' }}>📎 {doc.file_name}</span></td>
-                                                    <td>{formatDate(doc.start_date)}</td>
-                                                    <td>{formatDate(doc.expiry_date)}</td>
+                                                    <td>{formatUI(doc.start_date)}</td>
+                                                    <td>{formatUI(doc.expiry_date)}</td>
                                                     <td><span className={`badge badge-${status.type}`}>{status.icon} {status.label}</span></td>
                                                     <td>
                                                         <div className="actions-group">
@@ -464,7 +465,7 @@ export default function VehicleDocuments() {
                                             <td style={{ fontWeight: 500 }}>{v.model || '—'}</td>
                                             <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{v.chassis_number || '—'}</td>
                                             <td style={{ fontFamily: 'monospace', fontSize: '0.82rem' }}>{v.engine_number || '—'}</td>
-                                            <td>{formatDate(v.registration_date)}</td>
+                                            <td>{formatUI(v.registration_date)}</td>
                                             <td>
                                                 <div style={{ fontWeight: 500 }}>{v.owner_name || '—'}</div>
                                                 {v.owner_email && <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{v.owner_email}</div>}

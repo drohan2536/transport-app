@@ -17,6 +17,8 @@ export default function Companies() {
     const [currentCompany, setCurrentCompany] = useState(null);
     const [documents, setDocuments] = useState([]);
     const [uploading, setUploading] = useState(false);
+    const [logoUploading, setLogoUploading] = useState(false);
+    const [signatureUploading, setSignatureUploading] = useState(false);
 
     const load = async () => {
         setLoading(true);
@@ -110,6 +112,71 @@ export default function Companies() {
         } catch (e) { showToast(e.message, 'error'); }
     };
 
+    // --- Logo Management ---
+    const handleLogoUpload = async (companyId) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.svg';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            if (!file.name.toLowerCase().endsWith('.svg')) {
+                showToast('Only SVG files are allowed for logos', 'error');
+                return;
+            }
+            setLogoUploading(true);
+            try {
+                await api.uploadCompanyLogo(companyId, file);
+                showToast('Logo uploaded successfully! 🎨');
+                load();
+            } catch (err) { showToast(err.message, 'error'); }
+            setLogoUploading(false);
+        };
+        input.click();
+    };
+
+    const handleLogoDelete = async (companyId) => {
+        if (!confirm('Remove company logo?')) return;
+        try {
+            await api.deleteCompanyLogo(companyId);
+            showToast('Logo removed');
+            load();
+        } catch (e) { showToast(e.message, 'error'); }
+    };
+
+    // --- Signature Management ---
+    const handleSignatureUpload = async (companyId) => {
+        const input = document.createElement('input');
+        input.type = 'file';
+        input.accept = '.png,.jpg,.jpeg,.svg';
+        input.onchange = async (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+            const ext = file.name.split('.').pop().toLowerCase();
+            if (!['png', 'jpg', 'jpeg', 'svg'].includes(ext)) {
+                showToast('Only PNG, JPG, or SVG files are allowed for signatures', 'error');
+                return;
+            }
+            setSignatureUploading(true);
+            try {
+                await api.uploadCompanySignature(companyId, file);
+                showToast('Signature uploaded successfully! ✍️');
+                load();
+            } catch (err) { showToast(err.message, 'error'); }
+            setSignatureUploading(false);
+        };
+        input.click();
+    };
+
+    const handleSignatureDelete = async (companyId) => {
+        if (!confirm('Remove owner signature?')) return;
+        try {
+            await api.deleteCompanySignature(companyId);
+            showToast('Signature removed');
+            load();
+        } catch (e) { showToast(e.message, 'error'); }
+    };
+
     const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
     return (
@@ -131,6 +198,7 @@ export default function Companies() {
                     <table>
                         <thead>
                             <tr>
+                                <th style={{ width: '48px' }}>Logo</th>
                                 <th>Company Name</th>
                                 <th>Abbr</th>
                                 <th>Email</th>
@@ -144,6 +212,29 @@ export default function Companies() {
                         <tbody>
                             {companies.map(c => (
                                 <tr key={c.id}>
+                                    <td>
+                                        {c.logo_path ? (
+                                            <div style={{ position: 'relative', display: 'inline-block' }}>
+                                                <img
+                                                    src={`/uploads/${c.logo_path.split('/').pop()}`}
+                                                    alt="Logo"
+                                                    style={{ width: 36, height: 36, objectFit: 'contain', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)', background: '#fff', cursor: 'pointer' }}
+                                                    title="Click to change logo"
+                                                    onClick={() => handleLogoUpload(c.id)}
+                                                />
+                                            </div>
+                                        ) : (
+                                            <button
+                                                className="btn btn-ghost btn-sm"
+                                                onClick={() => handleLogoUpload(c.id)}
+                                                title="Upload Logo (SVG)"
+                                                disabled={logoUploading}
+                                                style={{ fontSize: '1rem', padding: '4px 8px' }}
+                                            >
+                                                🖼️
+                                            </button>
+                                        )}
+                                    </td>
                                     <td style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{c.name}</td>
                                     <td><span className="badge badge-info">{c.abbreviation || '—'}</span></td>
                                     <td>{c.email}</td>
@@ -212,6 +303,90 @@ export default function Companies() {
                                         <input className="form-input" value={form.owner_name} onChange={e => updateField('owner_name', e.target.value)} placeholder="Owner name" />
                                     </div>
                                 </div>
+
+                                {/* Logo Management in Edit Mode */}
+                                {editing && (
+                                    <div className="form-group">
+                                        <label className="form-label">Company Logo (SVG)</label>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', padding: 'var(--space-sm)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                                            {editing.logo_path ? (
+                                                <>
+                                                    <img
+                                                        src={`/uploads/${editing.logo_path.split('/').pop()}`}
+                                                        alt="Company Logo"
+                                                        style={{ width: 60, height: 60, objectFit: 'contain', borderRadius: 'var(--radius-sm)', background: '#fff', border: '1px solid var(--border-color)', padding: 4 }}
+                                                    />
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 6 }}>Logo uploaded</div>
+                                                        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleLogoUpload(editing.id)} disabled={logoUploading}>
+                                                                {logoUploading ? 'Uploading...' : '🔄 Change'}
+                                                            </button>
+                                                            <button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => handleLogoDelete(editing.id)}>
+                                                                🗑️ Remove
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div style={{ width: 60, height: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: '#fff', border: '2px dashed var(--border-color)', color: 'var(--text-muted)', fontSize: '1.5rem' }}>
+                                                        🖼️
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 6 }}>No logo uploaded. SVG format only.</div>
+                                                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleLogoUpload(editing.id)} disabled={logoUploading}>
+                                                            {logoUploading ? 'Uploading...' : '📤 Upload Logo'}
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* Signature Management in Edit Mode */}
+                                {editing && (
+                                    <div className="form-group" style={{ marginTop: 'var(--space-md)' }}>
+                                        <label className="form-label">Owner Signature (PNG, JPG, SVG)</label>
+                                        <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', padding: 'var(--space-sm)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                                            {editing.signature_path ? (
+                                                <>
+                                                    <div style={{ padding: 8, background: '#fff', borderRadius: 'var(--radius-sm)', border: '1px solid var(--border-color)' }}>
+                                                        <img
+                                                            src={`/uploads/${editing.signature_path.split('/').pop()}`}
+                                                            alt="Owner Signature"
+                                                            style={{ height: 40, width: 80, objectFit: 'contain' }}
+                                                        />
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 6 }}>Signature uploaded</div>
+                                                        <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                                            <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleSignatureUpload(editing.id)} disabled={signatureUploading}>
+                                                                {signatureUploading ? 'Uploading...' : '🔄 Change'}
+                                                            </button>
+                                                            <button type="button" className="btn btn-ghost btn-sm text-danger" onClick={() => handleSignatureDelete(editing.id)}>
+                                                                🗑️ Remove
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                </>
+                                            ) : (
+                                                <>
+                                                    <div style={{ width: 80, height: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: 'var(--radius-sm)', background: '#fff', border: '2px dashed var(--border-color)', color: 'var(--text-muted)', fontSize: '1.2rem' }}>
+                                                        ✍️
+                                                    </div>
+                                                    <div style={{ flex: 1 }}>
+                                                        <div style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginBottom: 6 }}>No signature uploaded.</div>
+                                                        <button type="button" className="btn btn-ghost btn-sm" onClick={() => handleSignatureUpload(editing.id)} disabled={signatureUploading}>
+                                                            {signatureUploading ? 'Uploading...' : '📤 Upload Signature'}
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                             <div className="modal-footer">
                                 <button type="button" className="btn btn-secondary" onClick={() => setShowModal(false)}>Cancel</button>

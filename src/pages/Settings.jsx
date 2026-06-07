@@ -35,6 +35,16 @@ export default function Settings() {
     const [resetDbLoading, setResetDbLoading] = useState(false);
     const [showResetDbConfirm, setShowResetDbConfirm] = useState(false);
     const [resetDbText, setResetDbText] = useState('');
+    const [resetModules, setResetModules] = useState(['ALL']);
+
+    // User Management state
+    const [users, setUsers] = useState([]);
+    const [usersLoading, setUsersLoading] = useState(false);
+    const [resetPwUserId, setResetPwUserId] = useState(null);
+    const [resetPwNew, setResetPwNew] = useState('');
+    const [resetPwConfirm, setResetPwConfirm] = useState('');
+    const [resetPwLoading, setResetPwLoading] = useState(false);
+    const [showDeleteUserConfirm, setShowDeleteUserConfirm] = useState(null);
 
     useEffect(() => {
         api.getSmtp().then(cfg => {
@@ -56,6 +66,7 @@ export default function Settings() {
         api.getCompanies().then(setCompanies).catch(() => { });
         loadOverrides();
         loadBackupInfo();
+        loadUsers();
     }, []);
 
     const loadOverrides = () => {
@@ -64,6 +75,47 @@ export default function Settings() {
 
     const loadBackupInfo = () => {
         api.getBackupInfo().then(setBackupInfo).catch(() => { });
+    };
+
+    const loadUsers = () => {
+        setUsersLoading(true);
+        api.getUsers().then(data => {
+            setUsers(data);
+            setUsersLoading(false);
+        }).catch(() => { setUsersLoading(false); });
+    };
+
+    const handleResetPassword = async (userId) => {
+        if (!resetPwNew || resetPwNew.length < 6) {
+            showToast('Password must be at least 6 characters', 'error');
+            return;
+        }
+        if (resetPwNew !== resetPwConfirm) {
+            showToast('Passwords do not match', 'error');
+            return;
+        }
+        setResetPwLoading(true);
+        try {
+            const res = await api.resetUserPassword(userId, resetPwNew);
+            showToast(res.message, 'success');
+            setResetPwUserId(null);
+            setResetPwNew('');
+            setResetPwConfirm('');
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+        setResetPwLoading(false);
+    };
+
+    const handleDeleteUser = async (userId) => {
+        setShowDeleteUserConfirm(null);
+        try {
+            const res = await api.deleteUser(userId);
+            showToast(res.message, 'success');
+            loadUsers();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
     };
 
     const handleBackupDownload = () => {
@@ -114,10 +166,15 @@ export default function Settings() {
             showToast('Please type RESET to confirm', 'error');
             return;
         }
+        if (resetModules.length === 0) {
+            showToast('Please select at least one module', 'error');
+            return;
+        }
+
         setShowResetDbConfirm(false);
         setResetDbLoading(true);
         try {
-            const res = await api.resetDatabase();
+            const res = await api.resetDatabase({ modules: resetModules });
             showToast(res.message, 'success');
             setResetDbText('');
             // Reload the page after a short delay so the UI reflects the reset data
@@ -183,6 +240,7 @@ export default function Settings() {
         { id: 'smtp', label: '✉️ Email (SMTP)', icon: '✉️' },
         { id: 'invoice', label: '🧾 Challan / Invoice', icon: '🧾' },
         { id: 'backup', label: '💾 Backup & Restore', icon: '💾' },
+        { id: 'users', label: '👥 User Management', icon: '👥' },
     ];
 
     const presetIntervals = [
@@ -618,16 +676,50 @@ export default function Settings() {
                             <span style={{ fontSize: '1.5rem' }}>💥</span>
                             <h3 style={{ margin: 0, color: 'var(--danger)' }}>Reset Database</h3>
                         </div>
-                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 'var(--space-lg)' }}>
-                            Permanently delete all data and reset the database to its initial empty state. <strong>This action cannot be undone.</strong>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 'var(--space-md)' }}>
+                            Select specific modules to delete data from, or choose <strong>Entire Database</strong> to factory reset. <strong>This action cannot be undone.</strong>
                         </p>
+                        
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: 'var(--space-lg)', padding: '12px', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)' }}>
+                            {[
+                                { id: 'ALL', label: '🚨 Entire Database (Factory Reset)', color: 'var(--danger)' },
+                                { id: 'companies', label: '🏢 Companies' },
+                                { id: 'clients', label: '👤 Clients' },
+                                { id: 'entries', label: '📋 Daily Entries' },
+                                { id: 'invoices', label: '🧾 Invoices' },
+                                { id: 'vehicles', label: '🚚 Vehicles & Documents' },
+                                { id: 'workers', label: '👷 Staff / Workers & Payroll' }
+                            ].map(mod => (
+                                <label key={mod.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', fontWeight: mod.id === 'ALL' ? 'bold' : 'normal', color: mod.color || 'inherit' }}>
+                                    <input 
+                                        type="checkbox" 
+                                        checked={resetModules.includes(mod.id)}
+                                        onChange={(e) => {
+                                            if (mod.id === 'ALL') {
+                                                setResetModules(e.target.checked ? ['ALL'] : []);
+                                            } else {
+                                                let newMods = e.target.checked 
+                                                    ? [...resetModules, mod.id] 
+                                                    : resetModules.filter(m => m !== mod.id);
+                                                // Uncheck ALL if individual is toggled
+                                                newMods = newMods.filter(m => m !== 'ALL');
+                                                setResetModules(newMods);
+                                            }
+                                        }}
+                                        style={{ accentColor: 'var(--danger)', width: '16px', height: '16px' }}
+                                    />
+                                    {mod.label}
+                                </label>
+                            ))}
+                        </div>
+
                         <button
                             className="btn btn-primary"
-                            disabled={resetDbLoading}
+                            disabled={resetDbLoading || resetModules.length === 0}
                             onClick={() => setShowResetDbConfirm(true)}
                             style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                         >
-                            {resetDbLoading ? '⏳ Resetting...' : '💥 Reset Database'}
+                            {resetDbLoading ? '⏳ Resetting...' : '💥 Reset Selected Data'}
                         </button>
                     </div>
 
@@ -722,6 +814,201 @@ export default function Settings() {
                                         style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
                                     >
                                         💥 Confirm Reset
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* User Management Tab */}
+            {activeTab === 'users' && (
+                <div>
+                    <div className="card" style={{ maxWidth: 800 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--space-sm)' }}>
+                            <span style={{ fontSize: '1.5rem' }}>👥</span>
+                            <h3 style={{ margin: 0 }}>User Management</h3>
+                        </div>
+                        <p style={{ fontSize: '0.85rem', color: 'var(--text-muted)', marginBottom: 'var(--space-lg)' }}>
+                            View all registered users, reset passwords, or remove user accounts.
+                        </p>
+
+                        {usersLoading ? (
+                            <div className="empty-state"><div className="spinner" style={{ margin: '0 auto' }}></div></div>
+                        ) : users.length === 0 ? (
+                            <div className="empty-state">
+                                <div className="empty-state-icon">👤</div>
+                                <p>No users found</p>
+                            </div>
+                        ) : (
+                            <div className="table-container">
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th>Name</th>
+                                            <th>Username</th>
+                                            <th>Phone</th>
+                                            <th>Role</th>
+                                            <th>Created</th>
+                                            <th>Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {users.map(u => (
+                                            <React.Fragment key={u.id}>
+                                                <tr>
+                                                    <td style={{ fontWeight: 600 }}>
+                                                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                                            <div style={{
+                                                                width: 30, height: 30, borderRadius: 8,
+                                                                background: u.role === 'admin' ? 'var(--accent-gradient)' : 'var(--bg-secondary)',
+                                                                color: u.role === 'admin' ? 'white' : 'var(--text-muted)',
+                                                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                                                fontWeight: 700, fontSize: '0.8rem', flexShrink: 0,
+                                                                border: u.role !== 'admin' ? '1px solid var(--border-color)' : 'none'
+                                                            }}>
+                                                                {u.name?.[0]?.toUpperCase() || '?'}
+                                                            </div>
+                                                            {u.name}
+                                                        </div>
+                                                    </td>
+                                                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.82rem' }}>@{u.username}</td>
+                                                    <td>{u.phone}</td>
+                                                    <td>
+                                                        <span className={`badge ${u.role === 'admin' ? 'badge-info' : 'badge-success'}`}>
+                                                            {u.role === 'admin' ? '🔑 Admin' : '👤 User'}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ fontSize: '0.82rem', color: 'var(--text-muted)' }}>
+                                                        {u.created_at ? new Date(u.created_at).toLocaleDateString('en-IN') : '-'}
+                                                    </td>
+                                                    <td>
+                                                        <div className="actions-group">
+                                                            <button
+                                                                className="btn btn-sm btn-secondary"
+                                                                onClick={() => {
+                                                                    setResetPwUserId(resetPwUserId === u.id ? null : u.id);
+                                                                    setResetPwNew('');
+                                                                    setResetPwConfirm('');
+                                                                }}
+                                                                title="Reset Password"
+                                                            >
+                                                                🔑 Reset Password
+                                                            </button>
+                                                            {u.username !== 'sa' && (
+                                                                <button
+                                                                    className="btn btn-sm btn-ghost"
+                                                                    onClick={() => setShowDeleteUserConfirm(u)}
+                                                                    title="Delete User"
+                                                                    style={{ color: 'var(--danger)' }}
+                                                                >
+                                                                    🗑️
+                                                                </button>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                </tr>
+                                                {/* Inline password reset form */}
+                                                {resetPwUserId === u.id && (
+                                                    <tr>
+                                                        <td colSpan="6">
+                                                            <div style={{
+                                                                padding: '16px 20px',
+                                                                background: 'var(--bg-secondary)',
+                                                                borderRadius: 'var(--radius-md)',
+                                                                margin: '4px 0',
+                                                                border: '1px solid var(--border-color)'
+                                                            }}>
+                                                                <div style={{ fontSize: '0.82rem', fontWeight: 600, color: 'var(--text-heading)', marginBottom: 12 }}>
+                                                                    🔑 Reset password for <span style={{ color: 'var(--secondary)' }}>@{u.username}</span>
+                                                                </div>
+                                                                <div style={{ display: 'flex', gap: 12, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+                                                                    <div style={{ flex: 1, minWidth: 180 }}>
+                                                                        <label className="form-label">New Password</label>
+                                                                        <input
+                                                                            className="form-input"
+                                                                            type="password"
+                                                                            placeholder="Min 6 characters"
+                                                                            value={resetPwNew}
+                                                                            onChange={e => setResetPwNew(e.target.value)}
+                                                                            minLength={6}
+                                                                        />
+                                                                    </div>
+                                                                    <div style={{ flex: 1, minWidth: 180 }}>
+                                                                        <label className="form-label">Confirm Password</label>
+                                                                        <input
+                                                                            className="form-input"
+                                                                            type="password"
+                                                                            placeholder="Re-enter password"
+                                                                            value={resetPwConfirm}
+                                                                            onChange={e => setResetPwConfirm(e.target.value)}
+                                                                            style={{
+                                                                                borderColor: resetPwConfirm && resetPwConfirm !== resetPwNew ? 'var(--danger)' : undefined
+                                                                            }}
+                                                                        />
+                                                                        {resetPwConfirm && resetPwConfirm !== resetPwNew && (
+                                                                            <div className="form-error">Passwords do not match</div>
+                                                                        )}
+                                                                    </div>
+                                                                    <div style={{ display: 'flex', gap: 8 }}>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn btn-primary btn-sm"
+                                                                            disabled={resetPwLoading || !resetPwNew || resetPwNew !== resetPwConfirm}
+                                                                            onClick={() => handleResetPassword(u.id)}
+                                                                        >
+                                                                            {resetPwLoading ? '⏳' : '✅ Save'}
+                                                                        </button>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn btn-secondary btn-sm"
+                                                                            onClick={() => { setResetPwUserId(null); setResetPwNew(''); setResetPwConfirm(''); }}
+                                                                        >
+                                                                            Cancel
+                                                                        </button>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                )}
+                                            </React.Fragment>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Delete User Confirmation Modal */}
+                    {showDeleteUserConfirm && (
+                        <div className="modal-overlay">
+                            <div style={{
+                                background: 'var(--bg-card)', borderRadius: 'var(--radius-lg)', padding: '28px 32px',
+                                maxWidth: 420, width: '90%', boxShadow: '0 20px 60px rgba(0,0,0,0.3)',
+                                animation: 'slideUp 0.2s ease'
+                            }}>
+                                <div style={{ fontSize: '2rem', textAlign: 'center', marginBottom: '12px' }}>🗑️</div>
+                                <h3 style={{ textAlign: 'center', marginBottom: '8px', color: 'var(--danger)' }}>Delete User</h3>
+                                <p style={{ textAlign: 'center', fontSize: '0.88rem', color: 'var(--text-secondary)', marginBottom: '20px' }}>
+                                    Are you sure you want to delete <strong>@{showDeleteUserConfirm.username}</strong> ({showDeleteUserConfirm.name})?
+                                    This action cannot be undone.
+                                </p>
+                                <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+                                    <button
+                                        className="btn"
+                                        onClick={() => setShowDeleteUserConfirm(null)}
+                                        style={{ background: 'var(--bg-secondary)', color: 'var(--text-primary)' }}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button
+                                        className="btn btn-primary"
+                                        onClick={() => handleDeleteUser(showDeleteUserConfirm.id)}
+                                        style={{ background: 'var(--danger)', borderColor: 'var(--danger)' }}
+                                    >
+                                        🗑️ Delete
                                     </button>
                                 </div>
                             </div>

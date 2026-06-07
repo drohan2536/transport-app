@@ -1,13 +1,23 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
-import { buildPdfDefinition, loadLogoBase64, pdfMake } from '../utils/pdfGenerator.js';
+import { buildPdfDefinition, loadCompanyLogoBase64, loadCompanySignatureBase64, pdfMake } from '../utils/pdfGenerator.js';
+import { formatUI } from '../utils/dateUtils.js';
 
 export default function Dashboard() {
     const showToast = useToast();
     const [invoices, setInvoices] = useState([]);
     const [loading, setLoading] = useState(true);
     const [viewInvoice, setViewInvoice] = useState(null);
+    const [editInvoiceData, setEditInvoiceData] = useState(null);
+    const [editEntries, setEditEntries] = useState([]);
+    const [editSelectedEntryIds, setEditSelectedEntryIds] = useState([]);
+    const [editInvoiceDate, setEditInvoiceDate] = useState('');
+    const [editWantsAdjustment, setEditWantsAdjustment] = useState(false);
+    const [editAdjustmentType, setEditAdjustmentType] = useState('');
+    const [editAdjustmentAmount, setEditAdjustmentAmount] = useState('');
+    const [editAdjustmentReason, setEditAdjustmentReason] = useState('');
+    const [savingEdit, setSavingEdit] = useState(false);
 
     // Schedule Send state
     const [showScheduleModal, setShowScheduleModal] = useState(false);
@@ -20,6 +30,15 @@ export default function Dashboard() {
     const [showScheduledList, setShowScheduledList] = useState(false);
     const [scheduledEmails, setScheduledEmails] = useState([]);
     const [loadingScheduled, setLoadingScheduled] = useState(false);
+
+    // Filters
+    const [filters, setFilters] = useState({
+        search: '',
+        company_name: '',
+        payment_status: '',
+        from_date: '',
+        to_date: ''
+    });
 
     const load = async () => {
         setLoading(true);
@@ -57,9 +76,10 @@ export default function Dashboard() {
     const handleSavePdf = async (inv) => {
         try {
             const full = await api.getInvoice(inv.id);
-            const logoBase64 = await loadLogoBase64();
+            const logoBase64 = await loadCompanyLogoBase64(full.company_logo_path);
+            const signatureBase64 = await loadCompanySignatureBase64(full.company_signature_path);
 
-            const docDef = buildPdfDefinition(full, logoBase64);
+            const docDef = buildPdfDefinition(full, logoBase64, signatureBase64);
             pdfMake.createPdf(docDef).getBlob((blob) => {
                 const url = URL.createObjectURL(blob);
                 const a = document.createElement('a');
@@ -87,10 +107,11 @@ export default function Dashboard() {
                 return;
             }
 
-            const logoBase64 = await loadLogoBase64();
+            const logoBase64 = await loadCompanyLogoBase64(full.company_logo_path);
+            const signatureBase64 = await loadCompanySignatureBase64(full.company_signature_path);
 
             // Generate PDF as base64 using already-initialized pdfMake
-            const docDef = buildPdfDefinition(full, logoBase64);
+            const docDef = buildPdfDefinition(full, logoBase64, signatureBase64);
             pdfMake.createPdf(docDef).getBase64(async (base64) => {
                 try {
                     await api.emailInvoice(inv.id, base64);
@@ -138,8 +159,9 @@ export default function Dashboard() {
                 return;
             }
 
-            const logoBase64 = await loadLogoBase64();
-            const docDef = buildPdfDefinition(full, logoBase64);
+            const logoBase64 = await loadCompanyLogoBase64(full.company_logo_path);
+            const signatureBase64 = await loadCompanySignatureBase64(full.company_signature_path);
+            const docDef = buildPdfDefinition(full, logoBase64, signatureBase64);
 
             pdfMake.createPdf(docDef).getBase64(async (base64) => {
                 try {
@@ -175,11 +197,82 @@ export default function Dashboard() {
         } catch (e) { showToast(e.message, 'error'); }
     };
 
-    // Stats
-    const totalPaid = invoices.filter(i => i.status === 'paid').length;
-    const totalUnpaid = invoices.filter(i => i.status === 'unpaid').length;
-    const totalRevenue = invoices.reduce((s, i) => s + (i.final_amount || 0), 0);
-    const paidRevenue = invoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.final_amount || 0), 0);
+    const handleEditClick = async (inv) => {
+        try {
+            const full = await api.getInvoice(inv.id);
+            const uninvoiced = await api.getEntries({
+                client_id: full.client_id,
+                from_date: full.from_date,
+                to_date: full.to_date,
+                uninvoiced: '1'
+            });
+            const combinedEntries = [...full.entries, ...uninvoiced].sort((a, b) => new Date(a.date) - new Date(b.date));
+            setEditEntries(combinedEntries);
+            setEditSelectedEntryIds(full.entries.map(e => e.id));
+            setEditInvoiceDate(full.invoice_date);
+            if (full.adjustment_amount > 0) {
+                setEditWantsAdjustment(true);
+                setEditAdjustmentType(full.adjustment_type);
+                setEditAdjustmentAmount(full.adjustment_amount);
+                setEditAdjustmentReason(full.adjustment_reason);
+            } else {
+                setEditWantsAdjustment(false);
+                setEditAdjustmentType('');
+                setEditAdjustmentAmount('');
+                setEditAdjustmentReason('');
+            }
+            setEditInvoiceData(full);
+        } catch (e) {
+            showToast(e.message, 'error');
+        }
+    };
+
+    const handleSaveEdit = async () => {
+        if (editSelectedEntryIds.length === 0) {
+            showToast('Please select at least one entry', 'error');
+            return;
+        }
+        if (editWantsAdjustment) {
+            if (!editAdjustmentType) return showToast('Please select adjustment type', 'error');
+            if (!editAdjustmentAmount || parseFloat(editAdjustmentAmount) <= 0) return showToast('Please enter a valid amount', 'error');
+            if (!editAdjustmentReason.trim()) return showToast('Please enter the reason', 'error');
+        }
+        setSavingEdit(true);
+        try {
+            const payload = {
+                invoice_date: editInvoiceDate,
+                entry_ids: editSelectedEntryIds,
+                adjustment_type: editWantsAdjustment ? editAdjustmentType : '',
+                adjustment_amount: editWantsAdjustment ? parseFloat(editAdjustmentAmount) : 0,
+                adjustment_reason: editWantsAdjustment ? editAdjustmentReason.trim() : ''
+            };
+            await api.updateInvoice(editInvoiceData.id, payload);
+            showToast('Invoice updated successfully! 🎉');
+            setEditInvoiceData(null);
+            load();
+        } catch (e) {
+            showToast(e.message, 'error');
+        }
+        setSavingEdit(false);
+    };
+
+    // ─── Filtering ─────────────────────
+    const filteredInvoices = invoices.filter(inv => {
+        if (filters.search && !inv.invoice_number.toLowerCase().includes(filters.search.toLowerCase())) return false;
+        if (filters.company_name && inv.company_name !== filters.company_name) return false;
+        if (filters.payment_status && inv.status !== filters.payment_status) return false;
+        if (filters.from_date && inv.invoice_date < filters.from_date) return false;
+        if (filters.to_date && inv.invoice_date > filters.to_date) return false;
+        return true;
+    });
+
+    const uniqueCompanies = [...new Set(invoices.map(i => i.company_name).filter(Boolean))];
+
+    // Stats based on filtered invoices
+    const totalPaid = filteredInvoices.filter(i => i.status === 'paid').length;
+    const totalUnpaid = filteredInvoices.filter(i => i.status === 'unpaid').length;
+    const totalRevenue = filteredInvoices.reduce((s, i) => s + (i.final_amount || 0), 0);
+    const paidRevenue = filteredInvoices.filter(i => i.status === 'paid').reduce((s, i) => s + (i.final_amount || 0), 0);
 
     // Minimum datetime for schedule picker (now + 5 min)
     const minDate = new Date().toISOString().split('T')[0];
@@ -207,13 +300,77 @@ export default function Dashboard() {
                 </button>
             </div>
 
+            {/* Filters */}
+            <div className="card mb-lg" style={{ padding: '15px' }}>
+                <div style={{ display: 'flex', gap: '15px', alignItems: 'end', flexWrap: 'wrap' }}>
+                    <div style={{ flex: 1, minWidth: '150px' }}>
+                        <label className="form-label">Search Invoice No.</label>
+                        <input
+                            className="form-input"
+                            type="text"
+                            placeholder="e.g. INV-..."
+                            value={filters.search}
+                            onChange={e => setFilters(p => ({ ...p, search: e.target.value }))}
+                        />
+                    </div>
+                    <div style={{ flex: 1, minWidth: '180px' }}>
+                        <label className="form-label">Company</label>
+                        <select
+                            className="form-select"
+                            value={filters.company_name}
+                            onChange={e => setFilters(p => ({ ...p, company_name: e.target.value }))}
+                        >
+                            <option value="">All Companies</option>
+                            {uniqueCompanies.map(c => <option key={c} value={c}>{c}</option>)}
+                        </select>
+                    </div>
+                    <div style={{ flex: 1, minWidth: '140px' }}>
+                        <label className="form-label">Payment Status</label>
+                        <select
+                            className="form-select"
+                            value={filters.payment_status}
+                            onChange={e => setFilters(p => ({ ...p, payment_status: e.target.value }))}
+                        >
+                            <option value="">All</option>
+                            <option value="paid">✅ Paid</option>
+                            <option value="unpaid">⏳ Unpaid</option>
+                        </select>
+                    </div>
+                    <div style={{ flex: 1, minWidth: '150px' }}>
+                        <label className="form-label">From Date</label>
+                        <input
+                            className="form-input"
+                            type="date"
+                            value={filters.from_date}
+                            onChange={e => setFilters(p => ({ ...p, from_date: e.target.value }))}
+                        />
+                    </div>
+                    <div style={{ flex: 1, minWidth: '150px' }}>
+                        <label className="form-label">To Date</label>
+                        <input
+                            className="form-input"
+                            type="date"
+                            value={filters.to_date}
+                            onChange={e => setFilters(p => ({ ...p, to_date: e.target.value }))}
+                        />
+                    </div>
+                    <button 
+                        className="btn btn-secondary" 
+                        onClick={() => setFilters({ search: '', company_name: '', payment_status: '', from_date: '', to_date: '' })}
+                        style={{ height: '40px' }}
+                    >
+                        Clear
+                    </button>
+                </div>
+            </div>
+
             {/* Stats */}
             <div className="stats-row">
                 <div className="stat-card">
                     <div className="stat-icon">📄</div>
                     <div>
-                        <div className="stat-value">{invoices.length}</div>
-                        <div className="stat-label">Total Invoices</div>
+                        <div className="stat-value">{filteredInvoices.length}</div>
+                        <div className="stat-label">Invoices Found</div>
                     </div>
                 </div>
                 <div className="stat-card">
@@ -242,10 +399,10 @@ export default function Dashboard() {
             {/* Invoice Table */}
             {loading ? (
                 <div className="empty-state"><div className="spinner" style={{ margin: '0 auto' }}></div></div>
-            ) : invoices.length === 0 ? (
+            ) : filteredInvoices.length === 0 ? (
                 <div className="empty-state">
                     <div className="empty-state-icon">📊</div>
-                    <p>No invoices yet. Create your first invoice from the Create Invoice page.</p>
+                    <p>{invoices.length === 0 ? 'No invoices yet. Create your first invoice from the Create Invoice page.' : 'No invoices match your filters.'}</p>
                 </div>
             ) : (
                 <div className="table-container">
@@ -262,7 +419,7 @@ export default function Dashboard() {
                             </tr>
                         </thead>
                         <tbody>
-                            {invoices.map(inv => (
+                            {filteredInvoices.map(inv => (
                                 <tr key={inv.id}>
                                     <td>
                                         <span className="font-mono" style={{ color: 'var(--accent-primary-hover)', fontWeight: 600, cursor: 'pointer' }} onClick={() => handleView(inv)}>
@@ -282,6 +439,9 @@ export default function Dashboard() {
                                     <td>
                                         <div className="actions-group">
                                             <button className="btn btn-ghost btn-sm" onClick={() => handleView(inv)} title="View">👁️</button>
+                                            {inv.status === 'unpaid' && (
+                                                <button className="btn btn-ghost btn-sm" onClick={() => handleEditClick(inv)} title="Edit">✏️</button>
+                                            )}
                                             <button className="btn btn-ghost btn-sm" onClick={() => handleSavePdf(inv)} title="Download PDF">📥</button>
                                             <button className="btn btn-ghost btn-sm" onClick={() => handleEmail(inv)} title="Send Email Now">✉️</button>
                                             <button className="btn btn-ghost btn-sm" onClick={() => openScheduleModal(inv)} title="Schedule Email" style={{ position: 'relative' }}>
@@ -360,7 +520,7 @@ export default function Dashboard() {
                                         {(viewInvoice.entries || []).map((e, i) => (
                                             <tr key={e.id}>
                                                 <td style={{ border: '1px solid #333', padding: '5px 8px', textAlign: 'center' }}>{i + 1}.</td>
-                                                <td style={{ border: '1px solid #333', padding: '5px 8px' }}>{e.date}</td>
+                                                <td style={{ border: '1px solid #333', padding: '5px 8px' }}>{formatUI(e.date)}</td>
                                                 <td style={{ border: '1px solid #333', padding: '5px 8px' }}>{e.from_location || '—'}</td>
                                                 <td style={{ border: '1px solid #333', padding: '5px 8px' }}>{e.to_location || '—'}</td>
                                                 <td style={{ border: '1px solid #333', padding: '5px 8px' }}>
@@ -417,15 +577,119 @@ export default function Dashboard() {
                                 </table>
 
                                 {/* Footer: PAN + Owner */}
-                                <div className="inv-footer" style={{ display: 'flex', justifyContent: 'space-between', marginTop: 20 }}>
+                                <div className="inv-footer" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end', marginTop: 20 }}>
                                     <div style={{ fontWeight: 600 }}>{viewInvoice.pan_id && `PAN NO. :- ${viewInvoice.pan_id}`}</div>
-                                    <div style={{ fontWeight: 600 }}>{viewInvoice.owner_name || ''}</div>
+                                    <div style={{ textAlign: 'center' }}>
+                                        <div style={{ fontWeight: 600, color: 'var(--text-secondary)', marginBottom: 4, fontSize: '0.85rem' }}>Auth. Signatory:</div>
+                                        {viewInvoice.company_signature_path ? (
+                                            <img src={`/uploads/${viewInvoice.company_signature_path.split('/').pop()}`} alt="Owner Signature" style={{ height: 40, objectFit: 'contain', marginBottom: 4 }} />
+                                        ) : (
+                                            <div style={{ height: 40 }} />
+                                        )}
+                                        <div style={{ fontWeight: 600 }}>{viewInvoice.owner_name || ''}</div>
+                                    </div>
                                 </div>
                             </div>
                         </div>
                         <div className="modal-footer">
                             <button className="btn btn-secondary" onClick={() => setViewInvoice(null)}>Close</button>
                             <button className="btn btn-primary" onClick={() => { handleSavePdf(viewInvoice); }}>📥 Download PDF</button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Edit Invoice Modal */}
+            {editInvoiceData && (
+                <div className="modal-overlay" onClick={() => setEditInvoiceData(null)}>
+                    <div className="modal modal-lg" onClick={e => e.stopPropagation()} style={{ maxWidth: 800 }}>
+                        <div className="modal-header">
+                            <h2>✏️ Edit Invoice {editInvoiceData.invoice_number}</h2>
+                            <button className="modal-close" onClick={() => setEditInvoiceData(null)}>×</button>
+                        </div>
+                        <div className="modal-body">
+                            <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
+                                <div className="form-group">
+                                    <label className="form-label">Client</label>
+                                    <input className="form-input" type="text" value={editInvoiceData.client_name} disabled />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label">Date Range</label>
+                                    <input className="form-input" type="text" value={`${editInvoiceData.from_date} to ${editInvoiceData.to_date}`} disabled />
+                                </div>
+                                <div className="form-group">
+                                    <label className="form-label required">Invoice Date</label>
+                                    <input className="form-input" type="date" value={editInvoiceDate} onChange={e => setEditInvoiceDate(e.target.value)} />
+                                </div>
+                            </div>
+                            
+                            <h3 style={{ marginTop: 'var(--space-md)', marginBottom: 'var(--space-sm)' }}>Entries</h3>
+                            <div className="table-container" style={{ maxHeight: '300px', overflowY: 'auto' }}>
+                                <table>
+                                    <thead>
+                                        <tr>
+                                            <th><input type="checkbox" checked={editSelectedEntryIds.length === editEntries.length && editEntries.length > 0} onChange={() => {
+                                                if (editSelectedEntryIds.length === editEntries.length) setEditSelectedEntryIds([]);
+                                                else setEditSelectedEntryIds(editEntries.map(e => e.id));
+                                            }} /></th>
+                                            <th>Date</th>
+                                            <th>Route</th>
+                                            <th>Type</th>
+                                            <th className="text-right">Total</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {editEntries.map(e => (
+                                            <tr key={e.id} style={{ opacity: editSelectedEntryIds.includes(e.id) ? 1 : 0.5 }}>
+                                                <td><input type="checkbox" checked={editSelectedEntryIds.includes(e.id)} onChange={() => {
+                                                    setEditSelectedEntryIds(prev => prev.includes(e.id) ? prev.filter(x => x !== e.id) : [...prev, e.id]);
+                                                }} /></td>
+                                                <td>{formatUI(e.date)}</td>
+                                                <td>{e.from_location && e.to_location ? `${e.from_location} → ${e.to_location}` : '—'}</td>
+                                                <td>{e.entry_type === 'per_kg' ? 'Per Kg' : 'Per Bundle'}</td>
+                                                <td className="text-right font-mono">₹{(e.total_amount || 0).toFixed(2)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+
+                            {/* Adjustment Section */}
+                            <div style={{ marginTop: 'var(--space-lg)', padding: 'var(--space-md)', background: 'var(--bg-secondary)', borderRadius: 'var(--radius-md)', border: '1px solid var(--border-color)' }}>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 'var(--space-md)', marginBottom: editWantsAdjustment ? 'var(--space-md)' : 0 }}>
+                                    <label style={{ fontWeight: 600, fontSize: '0.95rem', color: 'var(--text-primary)' }}>Any adjustments required?</label>
+                                    <div style={{ display: 'flex', gap: 'var(--space-sm)' }}>
+                                        <button className={`btn btn-sm ${editWantsAdjustment ? 'btn-primary' : 'btn-ghost'}`} onClick={() => setEditWantsAdjustment(true)} type="button">Yes</button>
+                                        <button className={`btn btn-sm ${!editWantsAdjustment ? 'btn-primary' : 'btn-ghost'}`} onClick={() => { setEditWantsAdjustment(false); setEditAdjustmentType(''); setEditAdjustmentAmount(''); setEditAdjustmentReason(''); }} type="button">No</button>
+                                    </div>
+                                </div>
+                                {editWantsAdjustment && (
+                                    <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 2fr' }}>
+                                        <div className="form-group">
+                                            <label className="form-label required">Adjustment Type</label>
+                                            <select className="form-select" value={editAdjustmentType} onChange={e => setEditAdjustmentType(e.target.value)}>
+                                                <option value="">Select…</option>
+                                                <option value="addition">Addition (+)</option>
+                                                <option value="subtraction">Subtraction (−)</option>
+                                            </select>
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label required">Amount (₹)</label>
+                                            <input className="form-input" type="number" min="0" step="0.01" value={editAdjustmentAmount} onChange={e => setEditAdjustmentAmount(e.target.value)} />
+                                        </div>
+                                        <div className="form-group">
+                                            <label className="form-label required">Reason</label>
+                                            <input className="form-input" type="text" value={editAdjustmentReason} onChange={e => setEditAdjustmentReason(e.target.value)} />
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                        <div className="modal-footer">
+                            <button className="btn btn-secondary" onClick={() => setEditInvoiceData(null)}>Cancel</button>
+                            <button className="btn btn-primary" onClick={handleSaveEdit} disabled={savingEdit}>
+                                {savingEdit ? <span className="spinner"></span> : '💾 Save Changes'}
+                            </button>
                         </div>
                     </div>
                 </div>

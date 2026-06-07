@@ -2,6 +2,7 @@ import Database from 'better-sqlite3';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import fs from 'fs';
+import crypto from 'crypto';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const dbDir = path.join(__dirname, '..', 'data');
@@ -72,8 +73,8 @@ function initializeDatabase(dbInstance) {
     vehicle_number TEXT DEFAULT '',
     entry_type TEXT NOT NULL CHECK(entry_type IN ('per_kg','per_bundle')),
     unit TEXT DEFAULT '',
-    length REAL DEFAULT 0,
-    width REAL DEFAULT 0,
+    length REAL DEFAULT NULL,
+    width REAL DEFAULT NULL,
     gsm REAL DEFAULT 0,
     packaging REAL DEFAULT 0,
     no_of_packets INTEGER DEFAULT 0,
@@ -86,6 +87,7 @@ function initializeDatabase(dbInstance) {
     loading_charges REAL DEFAULT 0,
     total_amount REAL DEFAULT 0,
     invoice_id INTEGER REFERENCES invoices(id) ON DELETE SET NULL,
+    is_paid INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -99,6 +101,16 @@ function initializeDatabase(dbInstance) {
     to_date TEXT NOT NULL,
     final_amount REAL NOT NULL DEFAULT 0,
     status TEXT DEFAULT 'unpaid' CHECK(status IN ('unpaid','paid')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  );
+
+  CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    username TEXT NOT NULL UNIQUE,
+    password_hash TEXT NOT NULL,
+    phone TEXT NOT NULL,
+    role TEXT NOT NULL DEFAULT 'user',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   );
 
@@ -232,7 +244,15 @@ function initializeDatabase(dbInstance) {
     "ALTER TABLE invoices ADD COLUMN adjustment_amount REAL DEFAULT 0",
     "ALTER TABLE invoices ADD COLUMN adjustment_reason TEXT DEFAULT ''",
     "ALTER TABLE attendance ADD COLUMN extra_pay REAL DEFAULT 0",
-    "ALTER TABLE attendance ADD COLUMN work_description TEXT DEFAULT ''"
+    "ALTER TABLE attendance ADD COLUMN work_description TEXT DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN logo_path TEXT DEFAULT ''",
+    "ALTER TABLE companies ADD COLUMN signature_path TEXT DEFAULT ''",
+    "ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'user'",
+    "ALTER TABLE entries ADD COLUMN is_paid INTEGER DEFAULT 0",
+    "ALTER TABLE clients ADD COLUMN default_entry_type TEXT DEFAULT ''",
+    "ALTER TABLE clients ADD COLUMN default_rate REAL DEFAULT NULL",
+    "ALTER TABLE clients ADD COLUMN default_from_location TEXT DEFAULT ''",
+    "ALTER TABLE clients ADD COLUMN default_to_location TEXT DEFAULT ''"
   ];
 
   migrations.forEach(sql => {
@@ -244,6 +264,59 @@ function initializeDatabase(dbInstance) {
       }
     }
   });
+
+  // Data migration: Ensure all existing clients have 'weight' and 'no_of_bundles' in invoice_visible_columns
+  try {
+    const clients = dbInstance.prepare('SELECT id, invoice_visible_columns FROM clients').all();
+    const updateStmt = dbInstance.prepare('UPDATE clients SET invoice_visible_columns = ? WHERE id = ?');
+    for (const client of clients) {
+      let cols = [];
+      try { cols = JSON.parse(client.invoice_visible_columns || '[]'); } catch (e) { cols = []; }
+      if (!Array.isArray(cols)) cols = [];
+      
+      let changed = false;
+      // Insert 'weight' before 'amount' if not present
+      if (!cols.includes('weight')) {
+        const amountIdx = cols.indexOf('amount');
+        if (amountIdx >= 0) {
+          cols.splice(amountIdx, 0, 'weight');
+        } else {
+          cols.push('weight');
+        }
+        changed = true;
+      }
+      // Insert 'no_of_bundles' right after 'weight' if not present
+      if (!cols.includes('no_of_bundles')) {
+        const weightIdx = cols.indexOf('weight');
+        if (weightIdx >= 0) {
+          cols.splice(weightIdx + 1, 0, 'no_of_bundles');
+        } else {
+          cols.push('no_of_bundles');
+        }
+        changed = true;
+      }
+      
+      if (changed) {
+        updateStmt.run(JSON.stringify(cols), client.id);
+      }
+    }
+    console.log('✅ Ensured weight & no_of_bundles columns for all clients');
+  } catch (err) {
+    console.error('Data migration (weight/bundles columns) error:', err.message);
+  }
+
+  // Seed system admin user (sa)
+  const saHash = crypto.createHash('sha256').update('rrd@2536').digest('hex');
+  const existingSa = dbInstance.prepare('SELECT id FROM users WHERE username = ?').get('sa');
+  if (!existingSa) {
+    dbInstance.prepare(
+      'INSERT INTO users (name, username, password_hash, phone, role) VALUES (?, ?, ?, ?, ?)'
+    ).run('System Admin', 'sa', saHash, '0000000000', 'admin');
+    console.log('👤 System admin user (sa) created');
+  } else {
+    // Ensure sa always has admin role
+    dbInstance.prepare('UPDATE users SET role = ? WHERE username = ?').run('admin', 'sa');
+  }
 }
 
 // Open the database and run initialization

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
+import { formatUI } from '../utils/dateUtils.js';
 import { viewPayslip, downloadPayslip } from '../utils/payslipGenerator.js';
 
 const TABS = ['Workers', 'Attendance', 'Advances', 'Pending', 'Salary'];
@@ -419,7 +420,7 @@ export default function Workers() {
                             <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
                                 {holidays.map(h => (
                                     <span key={h.id} className="badge badge-warning" style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', padding: '5px 10px' }}>
-                                        🎉 {h.date} — {h.name}
+                                        🎉 {formatUI(h.date)} — {h.name}
                                         <button onClick={() => deleteHoliday(h.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontSize: '0.85rem', lineHeight: 1 }}>✕</button>
                                     </span>
                                 ))}
@@ -570,7 +571,7 @@ export default function Workers() {
                             <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '440px' }}>
                                 <div className="modal-header">
                                     <div>
-                                        <h2 style={{ margin: 0 }}>📅 {attModalDate}</h2>
+                                        <h2 style={{ margin: 0 }}>📅 {formatUI(attModalDate)}</h2>
                                         {attModalIsSundayOrHoliday && (
                                             <span className="badge badge-warning" style={{ marginTop: '4px', display: 'inline-block' }}>
                                                 {isSunday(attModalDate) ? '🅂 Sunday — Week Off' : `🎉 ${getHolidayName(attModalDate)} — Holiday`}
@@ -749,7 +750,7 @@ export default function Workers() {
                                     <tbody>
                                         {advRecords.map(r => (
                                             <tr key={r.id}>
-                                                <td className="font-mono">{r.date}</td>
+                                                <td className="font-mono">{formatUI(r.date)}</td>
                                                 <td className="text-right font-mono" style={{ fontWeight: 600, color: 'var(--danger)' }}>{formatCurrency(r.amount)}</td>
                                                 <td><span className="badge badge-info">{r.mode_of_payment || '—'}</span></td>
                                                 <td>{r.paid_by || '—'}</td>
@@ -846,7 +847,7 @@ export default function Workers() {
                                     <tbody>
                                         {penRecords.map(r => (
                                             <tr key={r.id}>
-                                                <td className="font-mono">{r.date}</td>
+                                                <td className="font-mono">{formatUI(r.date)}</td>
                                                 <td className="text-right font-mono" style={{ fontWeight: 600, color: 'var(--success)' }}>{formatCurrency(r.amount)}</td>
                                                 <td style={{ color: 'var(--text-muted)' }}>{r.remark || '—'}</td>
                                                 <td>

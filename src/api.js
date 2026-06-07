@@ -5,6 +5,13 @@ async function request(url, options = {}) {
         headers: { 'Content-Type': 'application/json', ...options.headers },
         ...options,
     });
+    // Guard: make sure we received JSON, not HTML (happens when backend is down)
+    const contentType = res.headers.get('content-type') || '';
+    if (!contentType.includes('application/json')) {
+        if (!res.ok) throw new Error('Server unavailable');
+        if (res.status === 204) return null;
+        throw new Error('Server returned unexpected response. Is the backend running?');
+    }
     if (!res.ok) {
         const err = await res.json().catch(() => ({ error: res.statusText }));
         throw new Error(err.error || 'Request failed');
@@ -40,6 +47,32 @@ export const api = {
             });
     },
     deleteCompanyDocument: (id, docId) => request(`/companies/${id}/documents/${docId}`, { method: 'DELETE' }),
+    uploadCompanyLogo: (id, file) => {
+        const fd = new FormData();
+        fd.append('logo', file);
+        return fetch(`${BASE}/companies/${id}/logo`, { method: 'POST', body: fd })
+            .then(async res => {
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: res.statusText }));
+                    throw new Error(err.error || 'Logo upload failed');
+                }
+                return res.json();
+            });
+    },
+    deleteCompanyLogo: (id) => request(`/companies/${id}/logo`, { method: 'DELETE' }),
+    uploadCompanySignature: (id, file) => {
+        const fd = new FormData();
+        fd.append('signature', file);
+        return fetch(`${BASE}/companies/${id}/signature`, { method: 'POST', body: fd })
+            .then(async res => {
+                if (!res.ok) {
+                    const err = await res.json().catch(() => ({ error: res.statusText }));
+                    throw new Error(err.error || 'Signature upload failed');
+                }
+                return res.json();
+            });
+    },
+    deleteCompanySignature: (id) => request(`/companies/${id}/signature`, { method: 'DELETE' }),
 
     // Clients
     getClients: () => request('/clients'),
@@ -56,6 +89,7 @@ export const api = {
     createEntry: (data) => request('/entries', { method: 'POST', body: JSON.stringify(data) }),
     updateEntry: (id, data) => request(`/entries/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
     deleteEntry: (id) => request(`/entries/${id}`, { method: 'DELETE' }),
+    toggleEntryPaid: (id) => request(`/entries/${id}/paid`, { method: 'PUT' }),
 
     // Invoices
     getInvoices: () => request('/invoices'),
@@ -73,8 +107,18 @@ export const api = {
     cancelScheduledEmail: (id) => request(`/scheduled-emails/${id}`, { method: 'DELETE' }),
 
     // Outstanding
-    getOutstanding: (from_date, to_date) => request(`/outstanding?from_date=${from_date}&to_date=${to_date}`),
-    getOutstandingDetail: (clientId, from_date, to_date) => request(`/outstanding/client/${clientId}?from_date=${from_date}&to_date=${to_date}`),
+    getOutstanding: (from_date, to_date, payment_filter) => {
+        let url = `/outstanding?from_date=${from_date}&to_date=${to_date}`;
+        if (payment_filter) url += `&payment_filter=${payment_filter}`;
+        return request(url);
+    },
+    getOutstandingDetail: (clientId, from_date, to_date, payment_filter) => {
+        let url = `/outstanding/client/${clientId}?from_date=${from_date}&to_date=${to_date}`;
+        if (payment_filter) url += `&payment_filter=${payment_filter}`;
+        return request(url);
+    },
+    getOldestUnpaidDate: () => request('/outstanding/oldest-unpaid-date'),
+    bulkMarkPaid: (entry_ids) => request('/outstanding/bulk-paid', { method: 'PUT', body: JSON.stringify({ entry_ids }) }),
 
     // SMTP
     getSmtp: () => request('/smtp'),
@@ -85,7 +129,7 @@ export const api = {
     updateSettings: (data) => request('/settings', { method: 'PUT', body: JSON.stringify(data) }),
     resetInvoiceNumber: (data) => request('/settings/reset-invoice-number', { method: 'POST', body: JSON.stringify(data) }),
     getInvoiceOverrides: () => request('/settings/invoice-overrides'),
-    resetDatabase: () => request('/settings/reset-database', { method: 'POST' }),
+    resetDatabase: (data) => request('/settings/reset-database', { method: 'POST', body: JSON.stringify(data) }),
 
     // Backup & Restore
     getBackupInfo: () => request('/settings/backup-info'),
@@ -151,4 +195,25 @@ export const api = {
     },
     createHoliday: (data) => request('/workers/holidays', { method: 'POST', body: JSON.stringify(data) }),
     deleteHoliday: (id) => request(`/workers/holidays/${id}`, { method: 'DELETE' }),
+
+    // User Management (admin only)
+    getUsers: () => {
+        const token = localStorage.getItem('auth_token');
+        return request('/auth/users', { headers: { 'Authorization': `Bearer ${token}` } });
+    },
+    resetUserPassword: (id, new_password) => {
+        const token = localStorage.getItem('auth_token');
+        return request(`/auth/users/${id}/reset-password`, {
+            method: 'PUT',
+            headers: { 'Authorization': `Bearer ${token}` },
+            body: JSON.stringify({ new_password })
+        });
+    },
+    deleteUser: (id) => {
+        const token = localStorage.getItem('auth_token');
+        return request(`/auth/users/${id}`, {
+            method: 'DELETE',
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+    },
 };

@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import db from '../db.js';
 
@@ -15,6 +16,47 @@ const storage = multer.diskStorage({
     }
 });
 const upload = multer({ storage });
+
+// Logo upload storage (SVG only)
+const logoStorage = multer.diskStorage({
+    destination: path.join(__dirname, '..', 'uploads'),
+    filename: (req, file, cb) => {
+        cb(null, `logo_${req.params.id}_${Date.now()}.svg`);
+    }
+});
+const logoUpload = multer({
+    storage: logoStorage,
+    fileFilter: (req, file, cb) => {
+        if (file.mimetype === 'image/svg+xml' || path.extname(file.originalname).toLowerCase() === '.svg') {
+            cb(null, true);
+        } else {
+            cb(new Error('Only SVG files are allowed for logos'), false);
+        }
+    },
+    limits: { fileSize: 2 * 1024 * 1024 } // 2MB limit
+});
+
+// Signature upload storage (PNG, JPG, SVG)
+const signatureStorage = multer.diskStorage({
+    destination: path.join(__dirname, '..', 'uploads'),
+    filename: (req, file, cb) => {
+        const ext = path.extname(file.originalname).toLowerCase();
+        cb(null, `signature_${req.params.id}_${Date.now()}${ext}`);
+    }
+});
+const signatureUpload = multer({
+    storage: signatureStorage,
+    fileFilter: (req, file, cb) => {
+        const allowed = ['.png', '.jpg', '.jpeg', '.svg'];
+        const ext = path.extname(file.originalname).toLowerCase();
+        if (allowed.includes(ext)) {
+            cb(null, true);
+        } else {
+            cb(new Error('Only PNG, JPG, or SVG files are allowed for signatures'), false);
+        }
+    },
+    limits: { fileSize: 2 * 1024 * 1024 } // 2MB limit
+});
 
 // GET all companies
 router.get('/', (req, res) => {
@@ -92,6 +134,86 @@ router.delete('/:id/documents/:docId', (req, res) => {
     }
 
     db.prepare('DELETE FROM company_documents WHERE id = ?').run(req.params.docId);
+    res.status(204).end();
+});
+
+// POST upload company logo (SVG only)
+router.post('/:id/logo', logoUpload.single('logo'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No SVG file uploaded' });
+
+    const company = db.prepare('SELECT logo_path FROM companies WHERE id = ?').get(req.params.id);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    // Delete old logo file if exists
+    if (company.logo_path) {
+        try {
+            const oldPath = path.join(__dirname, '..', company.logo_path);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        } catch (e) {
+            console.error('Error deleting old logo:', e);
+        }
+    }
+
+    const logoPath = `/uploads/${req.file.filename}`;
+    db.prepare('UPDATE companies SET logo_path = ? WHERE id = ?').run(logoPath, req.params.id);
+    res.json({ logo_path: logoPath });
+});
+
+// DELETE company logo
+router.delete('/:id/logo', (req, res) => {
+    const company = db.prepare('SELECT logo_path FROM companies WHERE id = ?').get(req.params.id);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    if (company.logo_path) {
+        try {
+            const fullPath = path.join(__dirname, '..', company.logo_path);
+            if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+        } catch (e) {
+            console.error('Error deleting logo file:', e);
+        }
+    }
+
+    db.prepare('UPDATE companies SET logo_path = ? WHERE id = ?').run('', req.params.id);
+    res.status(204).end();
+});
+
+// POST upload company signature (PNG, JPG, SVG)
+router.post('/:id/signature', signatureUpload.single('signature'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No image file uploaded' });
+
+    const company = db.prepare('SELECT signature_path FROM companies WHERE id = ?').get(req.params.id);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    // Delete old signature file if exists
+    if (company.signature_path) {
+        try {
+            const oldPath = path.join(__dirname, '..', company.signature_path);
+            if (fs.existsSync(oldPath)) fs.unlinkSync(oldPath);
+        } catch (e) {
+            console.error('Error deleting old signature:', e);
+        }
+    }
+
+    const sigPath = `/uploads/${req.file.filename}`;
+    db.prepare('UPDATE companies SET signature_path = ? WHERE id = ?').run(sigPath, req.params.id);
+    res.json({ signature_path: sigPath });
+});
+
+// DELETE company signature
+router.delete('/:id/signature', (req, res) => {
+    const company = db.prepare('SELECT signature_path FROM companies WHERE id = ?').get(req.params.id);
+    if (!company) return res.status(404).json({ error: 'Company not found' });
+
+    if (company.signature_path) {
+        try {
+            const fullPath = path.join(__dirname, '..', company.signature_path);
+            if (fs.existsSync(fullPath)) fs.unlinkSync(fullPath);
+        } catch (e) {
+            console.error('Error deleting signature file:', e);
+        }
+    }
+
+    db.prepare('UPDATE companies SET signature_path = ? WHERE id = ?').run('', req.params.id);
     res.status(204).end();
 });
 
