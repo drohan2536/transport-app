@@ -547,3 +547,38 @@
 [EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
 [Scheduler] Running initial expiry check...
 [Scheduler] ⏱️ Next check in 60 minute(s)
+✅ Ensured weight & no_of_bundles columns for all clients
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)
+✅ Ensured weight & no_of_bundles columns for all clients
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)
+✅ Ensured weight & no_of_bundles columns for all clients
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)
+✅ Ensured weight & no_of_bundles columns for all clients
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)
+✅ Ensured weight & no_of_bundles columns for all clients
+✅ Server running on http://localhost:9090
+[Scheduler] 🕐 Vehicle document expiry reminder scheduler started
+[Scheduler] Checking every 60 minute(s)
+[EmailScheduler] 📧 Scheduled email processor started (checking every 1 minute)
+[Scheduler] Running initial expiry check...
+[Scheduler] ⏱️ Next check in 60 minute(s)

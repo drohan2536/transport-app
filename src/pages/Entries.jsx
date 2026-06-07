@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../components/Layout.jsx';
+import SearchableSelect from '../components/SearchableSelect.jsx';
 
 const today = () => new Date().toISOString().split('T')[0];
 const firstDayOfMonth = () => {
@@ -48,7 +49,7 @@ export default function Entries() {
 
     // Dashboard Filters
     const [filters, setFilters] = useState({
-        client_id: '',
+        client_id: 'none',
         from_date: firstDayOfMonth(),
         to_date: today()
     });
@@ -61,6 +62,10 @@ export default function Entries() {
     };
 
     const loadEntries = async () => {
+        if (filters.client_id === 'none') {
+            setEntries([]);
+            return;
+        }
         setLoading(true);
         try {
             const params = {};
@@ -225,6 +230,23 @@ export default function Entries() {
 
     const updateField = (field, value) => setForm(prev => ({ ...prev, [field]: value }));
 
+    const handleClientChange = (clientId) => {
+        const client = clients.find(c => String(c.id) === String(clientId));
+        if (client && !editing) { // Only auto-fill if we are creating a new entry, not editing an existing one
+            setForm(prev => ({
+                ...prev,
+                client_id: clientId,
+                entry_type: client.default_entry_type || 'per_kg',
+                rate_per_kg: (client.default_entry_type === 'per_kg' || !client.default_entry_type) && client.default_rate != null ? client.default_rate : prev.rate_per_kg,
+                rate_per_bundle: client.default_entry_type === 'per_bundle' && client.default_rate != null ? client.default_rate : prev.rate_per_bundle,
+                from_location: client.default_from_location || prev.from_location,
+                to_location: client.default_to_location || prev.to_location
+            }));
+        } else {
+            updateField('client_id', clientId);
+        }
+    };
+
     const handleSave = async (e) => {
         e.preventDefault();
         if (!form.client_id || !form.date) {
@@ -283,14 +305,18 @@ export default function Entries() {
                 <div style={{ display: 'flex', gap: '15px', alignItems: 'end', flexWrap: 'wrap' }}>
                     <div style={{ flex: 1, minWidth: '200px' }}>
                         <label className="form-label">Client</label>
-                        <select
-                            className="form-select"
-                            value={filters.client_id}
-                            onChange={e => setFilters(p => ({ ...p, client_id: e.target.value }))}
-                        >
-                            <option value="">All Clients</option>
-                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                        </select>
+                        <div style={{ border: '1px solid var(--border-color)', borderRadius: '4px' }}>
+                            <SearchableSelect 
+                                options={[
+                                    { id: 'none', name: 'No client selected' },
+                                    { id: '', name: 'All Clients' },
+                                    ...clients.map(c => ({ id: c.id, name: c.name }))
+                                ]}
+                                value={filters.client_id} 
+                                onChange={val => setFilters(p => ({ ...p, client_id: val }))} 
+                                placeholder="Select Client..."
+                            />
+                        </div>
                     </div>
                     <div style={{ flex: 1, minWidth: '150px' }}>
                         <label className="form-label">From Date</label>
@@ -383,11 +409,15 @@ export default function Entries() {
                             <div className="modal-body">
                                 <div className="form-row" style={{ gridTemplateColumns: '1fr 1fr 1fr' }}>
                                     <div className="form-group">
-                                        <label className="form-label required">Client</label>
-                                        <select className="form-select" value={form.client_id} onChange={e => updateField('client_id', e.target.value)} required>
-                                            <option value="">Select client…</option>
-                                            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                        </select>
+                                        <label className="form-label">Client</label>
+                                        <div style={{ border: '1px solid var(--border-color)', borderRadius: '4px' }}>
+                                            <SearchableSelect 
+                                                options={clients.map(c => ({ id: c.id, name: c.name }))}
+                                                value={form.client_id} 
+                                                onChange={handleClientChange} 
+                                                placeholder="-- Select Client --"
+                                            />
+                                        </div>
                                     </div>
                                     <div className="form-group">
                                         <label className="form-label required">Date</label>

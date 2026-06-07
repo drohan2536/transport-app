@@ -688,3 +688,67 @@ Stacktrace:   at System.Runtime.InteropServices.Marshal.ThrowExceptionForHRInter
 2026-06-07 15:04:36 - Finished transportapp.exe
 2026-06-07 15:04:37 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
 2026-06-07 15:04:37 - Started 12512
+2026-06-07 15:20:04 - Stopping transportapp.exe
+2026-06-07 15:20:04 - ProcessKill 12512
+2026-06-07 15:20:04 - Found child process: 19160 Name: conhost.exe
+2026-06-07 15:20:04 - Found child process: 3104 Name: node.exe
+2026-06-07 15:20:04 - Stopping process 19160
+2026-06-07 15:20:04 - Send SIGINT 19160
+2026-06-07 15:20:04 - SIGINT to 19160 failed - Killing as fallback
+2026-06-07 15:20:04 - Stopping process 3104
+2026-06-07 15:20:04 - Send SIGINT 3104
+2026-06-07 15:20:04 - SIGINT to 3104 failed - Killing as fallback
+2026-06-07 15:20:04 - Stopping process 12512
+2026-06-07 15:20:04 - Send SIGINT 12512
+2026-06-07 15:20:04 - SIGINT to 12512 failed - Killing as fallback
+2026-06-07 15:20:04 - Finished transportapp.exe
+2026-06-07 15:20:05 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-06-07 15:20:05 - Started 11888
+2026-06-07 15:30:26 - Stopping transportapp.exe
+2026-06-07 15:30:26 - ProcessKill 11888
+2026-06-07 15:30:26 - Found child process: 11412 Name: conhost.exe
+2026-06-07 15:30:26 - Found child process: 7784 Name: node.exe
+2026-06-07 15:30:26 - Stopping process 11412
+2026-06-07 15:30:26 - Send SIGINT 11412
+2026-06-07 15:30:26 - SIGINT to 11412 failed - Killing as fallback
+2026-06-07 15:30:26 - Stopping process 7784
+2026-06-07 15:30:26 - Send SIGINT 7784
+2026-06-07 15:30:26 - SIGINT to 7784 failed - Killing as fallback
+2026-06-07 15:30:26 - Stopping process 11888
+2026-06-07 15:30:26 - Send SIGINT 11888
+2026-06-07 15:30:26 - SIGINT to 11888 failed - Killing as fallback
+2026-06-07 15:30:26 - Finished transportapp.exe
+2026-06-07 15:30:27 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-06-07 15:30:27 - Started 15000
+2026-06-07 15:34:14 - Stopping transportapp.exe
+2026-06-07 15:34:14 - ProcessKill 15000
+2026-06-07 15:34:15 - Found child process: 24372 Name: conhost.exe
+2026-06-07 15:34:15 - Found child process: 5992 Name: node.exe
+2026-06-07 15:34:15 - Stopping process 24372
+2026-06-07 15:34:15 - Send SIGINT 24372
+2026-06-07 15:34:15 - SIGINT to 24372 failed - Killing as fallback
+2026-06-07 15:34:15 - Stopping process 5992
+2026-06-07 15:34:15 - Send SIGINT 5992
+2026-06-07 15:34:15 - SIGINT to 5992 failed - Killing as fallback
+2026-06-07 15:34:15 - Stopping process 15000
+2026-06-07 15:34:15 - Send SIGINT 15000
+2026-06-07 15:34:15 - SIGINT to 15000 failed - Killing as fallback
+2026-06-07 15:34:15 - Finished transportapp.exe
+2026-06-07 15:34:16 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-06-07 15:34:16 - Started 19744
+2026-06-07 15:37:17 - Stopping transportapp.exe
+2026-06-07 15:37:17 - ProcessKill 19744
+2026-06-07 15:37:17 - Found child process: 18668 Name: conhost.exe
+2026-06-07 15:37:17 - Found child process: 10144 Name: node.exe
+2026-06-07 15:37:17 - Stopping process 18668
+2026-06-07 15:37:17 - Send SIGINT 18668
+2026-06-07 15:37:17 - SIGINT to 18668 failed - Killing as fallback
+2026-06-07 15:37:17 - Stopping process 10144
+2026-06-07 15:37:17 - Send SIGINT 10144
+2026-06-07 15:37:17 - SIGINT to 10144 failed - Killing as fallback
+2026-06-07 15:37:17 - Stopping process 19744
+2026-06-07 15:37:17 - Send SIGINT 19744
+2026-06-07 15:37:17 - SIGINT to 19744 failed - Killing as fallback
+2026-06-07 15:37:17 - Finished transportapp.exe
+2026-06-07 15:37:18 - Starting C:\Program Files\nodejs\node.exe  C:\Users\rohan\.gemini\antigravity\scratch\transport-app\node_modules\node-windows\lib\wrapper.js --file C:\Users\rohan\.gemini\antigravity\scratch\transport-app\server\index.js --scriptoptions= --log "TransportApp wrapper" --grow 0.25 --wait 1 --maxrestarts 3 --abortonerror n --stopparentfirst undefined
+2026-06-07 15:37:18 - Started 14832
